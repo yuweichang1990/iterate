@@ -1,6 +1,7 @@
 # Auto-Explorer runtime artifacts
 auto-explore-findings/
 .claude/auto-explorer.local.md
+.claude/auto-explorer-summary-pending
 *.tmp.*
 
 # OS files

@@ -1,0 +1,325 @@
+# Auto-Explorer: Scenarios & Use Cases
+
+Turn Claude Code into an autonomous agent that works for hours — not minutes.
+讓 Claude Code 變成自主工作數小時的 agent — 而不是幾分鐘。
+
+---
+
+## What is Auto-Explorer?
+
+Most Claude Code sessions follow a pattern: you ask, Claude answers, you ask again. Auto-Explorer breaks this pattern. Give Claude a topic or task, and it keeps going — iteration after iteration — until the work is done or your budget runs out.
+
+大多數 Claude Code 對話遵循一個模式：你問、Claude 答、你再問。Auto-Explorer 打破了這個模式。給 Claude 一個主題或任務，它會一輪接一輪地持續工作，直到完成或預算用盡。
+
+One command. Zero babysitting.
+一個指令，零看顧。
+
+---
+
+## Research Mode Scenarios / 研究模式情境
+
+### Deep-dive into a new technology / 深入研究一項新技術
+
+You want to learn Rust async programming but don't know where to start. Instead of reading scattered blog posts, ask Auto-Explorer.
+
+```bash
+/auto-explore Rust async programming
+```
+
+Claude will spend hours building a structured knowledge base: starting with an overview, then diving into async/await syntax, the Future trait, runtime internals (Tokio vs async-std), pinning, error handling, and real-world patterns. Each iteration goes deeper, and the `_index.md` file always has an up-to-date summary.
+
+**Result**: A folder of well-organized Markdown reports — your personal textbook on the topic, written by an AI that understands context across iterations.
+
+你想學 Rust 非同步程式設計但不知從何開始。與其閱讀零散的部落格文章，不如問 Auto-Explorer。Claude 會花數小時建立結構化的知識庫：從總覽開始，深入 async/await 語法、Future trait、runtime 內部機制、pin、錯誤處理和實務模式。每一輪都更深入，而 `_index.md` 始終有最新摘要。
+
+### Explore a domain you're curious about / 探索你好奇的領域
+
+```bash
+/auto-explore distributed consensus algorithms
+/auto-explore WebAssembly ecosystem and tooling
+/auto-explore 量子計算基礎與最新進展
+```
+
+Whether it's distributed systems, ML fundamentals, or the latest in WebAssembly — Auto-Explorer researches it like a tireless analyst. You come back to find 10+ structured reports waiting for you.
+
+不論是分散式系統、機器學習基礎，還是最新的 WebAssembly — Auto-Explorer 像不知疲倦的分析師一樣研究。回來時，10 多篇結構化報告已經等著你。
+
+### Controlled exploration with budget / 有預算控制的探索
+
+```bash
+/auto-explore --budget conservative quantum computing
+/auto-explore --budget aggressive distributed consensus
+```
+
+Don't want to use too much quota? `--budget conservative` stops at 40% usage. Want Claude to go deep? `--budget aggressive` pushes to 80%. The default `moderate` uses 60%.
+
+不想用太多額度？`--budget conservative` 在 40% 用量時停止。想讓 Claude 深入？`--budget aggressive` 推到 80%。預設 `moderate` 使用 60%。
+
+### Capped iteration count / 限制迭代次數
+
+```bash
+/auto-explore --max-iterations 5 Go generics
+```
+
+Just want a quick overview? Cap it at 5 iterations. Claude will write a summary on the final iteration.
+
+只想要快速總覽？限制在 5 個迭代。Claude 會在最後一輪寫出摘要。
+
+### No topic? Let Claude choose / 沒有主題？讓 Claude 選
+
+```bash
+/auto-explore
+```
+
+Auto-Explorer reads your interest profile (`~/.claude/user-interests.md`) and picks the first suggestion. Your interests are automatically updated every session — so the suggestions stay fresh.
+
+Auto-Explorer 會讀取你的興趣檔案，選擇第一個建議。你的興趣每次對話都會自動更新 — 建議始終保持新鮮。
+
+---
+
+## Build Mode Scenarios / 建置模式情境
+
+### Build a complete feature / 建置完整功能
+
+```bash
+/auto-explore build a REST API with authentication
+```
+
+Claude won't just write the code and stop. It will:
+
+1. **Plan**: Write an architecture document with task breakdown
+2. **Build**: Implement each sub-task across iterations, testing as it goes
+3. **Enhance**: Review its own work — fix edge cases, add error handling, improve tests
+4. **Polish**: Evaluate UX friction, improve onboarding, optimize defaults
+
+Auto-detected from action verbs: `build`, `implement`, `create`, `fix`, `refactor`, `deploy`, `optimize`, `migrate`... and their CJK equivalents.
+
+Claude 不會只寫程式碼就停下。它會：規劃、建置、增強，最後打磨產品體驗。從動作動詞自動偵測：`build`、`implement`、`建立`、`優化`...
+
+### Fix and improve existing code / 修復和改善既有程式碼
+
+```bash
+/auto-explore fix the authentication bug in the login flow
+/auto-explore refactor the database layer to use connection pooling
+/auto-explore improve error handling across the API
+```
+
+Give Claude a problem, and it works until it's solved — then keeps going to make the solution robust.
+
+給 Claude 一個問題，它會工作到解決為止 — 然後繼續讓方案更穩健。
+
+### Self-evolve a project / 自我進化一個專案
+
+```bash
+/auto-explore 請自我進化此 project
+```
+
+Point Auto-Explorer at its own codebase (or any project), and Claude will find bugs to fix, tests to add, documentation to improve, and UX friction to smooth out. It's like having a tireless junior engineer doing code review and improvements.
+
+將 Auto-Explorer 指向它自己的程式碼庫（或任何專案），Claude 會找到 bug 修復、需要新增的測試、需要改善的文檔和 UX 摩擦。就像有一個不知疲倦的初級工程師在做 code review 和改進。
+
+### Auto-generated completion report / 自動產生完成報告
+
+When build mode determines there's nothing left worth improving, it automatically generates a comprehensive `summary.md` before ending:
+
+- What was built and why
+- Architecture decisions
+- List of all deliverables
+- Test coverage results
+- Known limitations
+- How to use the result
+
+No manual export needed — the summary is always there when the session ends.
+
+當建置模式判定沒有值得改進的項目時，會在結束前自動產生完整的 `summary.md`：包含建置內容、架構決策、交付物清單、測試覆蓋率、已知限制和使用方式。不需要手動匯出。
+
+---
+
+## Bilingual & CJK Support / 雙語與 CJK 支援
+
+Auto-Explorer works equally well in English and CJK languages. Topic detection, mode detection, and polite prefix handling all support both:
+
+```bash
+/auto-explore 建立一個 REST API 認證系統
+/auto-explore 請幫我修復登入流程的 bug
+/auto-explore 分散式共識演算法
+```
+
+Polite prefixes like "please", "can you", "請", "幫我" are automatically stripped for accurate mode detection — so natural language works naturally.
+
+Auto-Explorer 在英文和 CJK 語言下同樣好用。主題偵測、模式偵測和禮貌前綴處理都支援雙語。禮貌前綴如 "please"、"請"、"幫我" 會自動去除，確保自然語言自然運作。
+
+---
+
+## Monitoring & Control / 監控與控制
+
+### Real-time dashboard / 即時儀表板
+
+```bash
+/explore-status
+```
+
+See the current session's progress: topic, mode, iteration count, rate limit usage with ASCII progress bars, and session history.
+
+查看當前 session 的進度：主題、模式、迭代次數、帶 ASCII 進度條的速率限制用量，以及 session 歷史。
+
+### Cancel anytime / 隨時取消
+
+```bash
+/cancel-explore
+```
+
+Stop the current session gracefully. All findings written so far are preserved.
+
+優雅地停止當前 session。已寫入的所有研究成果都會保留。
+
+### Rate limit safety net / 速率限制安全網
+
+Auto-Explorer monitors three time windows (4-hour, daily, weekly) and stops before you hit your plan's usage cap. The defaults are calibrated for typical usage, and you can customize them:
+
+```json
+// ~/.claude/auto-explorer-limits.json
+{
+  "threshold": 0.6,
+  "rate_limits": {
+    "4h":     { "tokens": 700000 },
+    "daily":  { "tokens": 4100000 },
+    "weekly": { "tokens": 29000000 }
+  }
+}
+```
+
+Auto-Explorer 監控三個時間窗口（4 小時、每日、每週），在你達到方案使用上限前停止。
+
+---
+
+## Who Is This For? / 目標用戶
+
+### The Curious Learner / 好奇的學習者
+
+You love learning new technologies but don't have time to curate learning paths. Set Auto-Explorer running before bed, wake up to a structured knowledge base.
+
+你喜歡學習新技術但沒時間策劃學習路徑。睡前啟動 Auto-Explorer，醒來收穫結構化知識庫。
+
+### The Solo Developer / 獨立開發者
+
+You're building a side project and want to move faster. Let Auto-Explorer handle the scaffolding, testing, and polish while you focus on the high-level decisions.
+
+你正在做一個 side project，想更快推進。讓 Auto-Explorer 處理腳手架、測試和打磨，你專注於高層決策。
+
+### The Power User / 進階用戶
+
+You already use Claude Code daily and want to maximize its potential. Auto-Explorer turns idle quota into structured output — research reports, code improvements, or project evolution.
+
+你已經每天使用 Claude Code，想最大化它的潛力。Auto-Explorer 把閒置額度轉化為結構化產出。
+
+### The Team Lead / 團隊負責人
+
+You want to prototype ideas quickly or generate documentation for your team. Run Auto-Explorer on a topic, review the output, and share the findings.
+
+你想快速原型化想法或為團隊產生文檔。對一個主題執行 Auto-Explorer，審查產出，分享研究成果。
+
+---
+
+## Comparison with Manual Exploration / 與手動探索的比較
+
+| Aspect | Manual Q&A | Auto-Explorer |
+|--------|-----------|---------------|
+| **Effort** | Ask → wait → ask → wait | One command, walk away |
+| **Depth** | Depends on your questions | Systematically covers the topic |
+| **Output** | Chat history (hard to review) | Structured Markdown files |
+| **Continuity** | Context lost between sessions | Each iteration builds on the previous |
+| **Budget** | Easy to over-spend or under-use | Automatic rate limit management |
+| **Summary** | You write it yourself | Auto-generated on completion |
+
+---
+
+## Future Directions / 未來方向
+
+### Session Resume / Session 恢復
+
+Pick up where you left off. Auto-Explorer saves enough context to continue a previous session without starting over.
+
+從上次中斷的地方繼續。Auto-Explorer 保存足夠的脈絡，讓你不必從頭開始。
+
+### Fresh Context Mode / 全新上下文模式
+
+For long sessions that approach context window limits, Auto-Explorer will start a new Claude session with a compressed summary of all previous work — getting fresh context while preserving continuity.
+
+對於接近上下文視窗限制的長 session，Auto-Explorer 會啟動新的 Claude session，攜帶所有先前工作的壓縮摘要 — 獲得全新上下文的同時保持連續性。
+
+### Compare Mode / 比較模式
+
+```bash
+/auto-explore --compare "React vs Vue vs Svelte for a new project"
+```
+
+Structured side-by-side comparison with evaluation criteria, pros/cons tables, and a recommendation — not just a list of differences.
+
+結構化的並排比較，包含評估標準、優缺點表格和建議 — 不只是差異列表。
+
+### Audit Mode / 審計模式
+
+```bash
+/auto-explore --mode audit
+```
+
+Point Auto-Explorer at your codebase and get a comprehensive audit: security issues, performance bottlenecks, code quality, dependency risks, and actionable recommendations.
+
+將 Auto-Explorer 指向你的程式碼庫，獲得全面審計：安全問題、效能瓶頸、代碼品質、依賴風險和可行動的建議。
+
+### Build Mode Auto-Verification / 建置模式自動驗證
+
+After each build iteration, automatically run the project's test suite and use the results to guide the next iteration. Failing tests become the next sub-task.
+
+每次建置迭代後，自動運行專案的測試套件，用結果引導下一輪迭代。失敗的測試成為下一個子任務。
+
+### Exploration Templates / 探索模板
+
+```bash
+/auto-explore --template deep-dive "Kubernetes"
+/auto-explore --template quickstart "FastAPI"
+/auto-explore --template architecture-review
+```
+
+Pre-configured exploration strategies: deep-dive (exhaustive), quickstart (practical focus), architecture-review (structural analysis), security-audit, etc.
+
+預設的探索策略：deep-dive（詳盡）、quickstart（實務重點）、architecture-review（結構分析）、security-audit 等。
+
+### HTML Export / HTML 匯出
+
+Beautiful, shareable HTML reports generated from the Markdown findings — complete with navigation, syntax highlighting, and a table of contents.
+
+從 Markdown 研究成果產生的精美、可分享的 HTML 報告 — 包含導航、語法高亮和目錄。
+
+### Custom Stop Conditions / 自訂停止條件
+
+```bash
+/auto-explore --done-when "all tests pass" build the feature
+/auto-explore --done-when "coverage > 80%" add tests
+```
+
+Define success criteria that Auto-Explorer checks each iteration. When the condition is met, it stops — not when budget runs out.
+
+定義 Auto-Explorer 每輪檢查的成功標準。當條件滿足時停止 — 而不是預算用完才停。
+
+---
+
+## Getting Started / 開始使用
+
+```bash
+# Install (one time)
+cd /path/to/parent-directory
+claude plugin marketplace add ./auto-explorer
+claude plugin install auto-explorer
+
+# Start Claude Code in autonomous mode
+claude --dangerously-skip-permissions
+
+# Explore!
+/auto-explore Rust async programming
+```
+
+That's it. Three commands to install, one command to explore. Everything else is automatic.
+
+就這樣。三個指令安裝，一個指令探索。其他一切都是自動的。

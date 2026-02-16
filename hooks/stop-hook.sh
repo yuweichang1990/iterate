@@ -94,6 +94,27 @@ get_session_duration() {
   fi
 }
 
+# Check for summary-pending flag (auto-export: summary was just generated)
+SUMMARY_FLAG=".claude/auto-explorer-summary-pending"
+if [[ -f "$SUMMARY_FLAG" ]]; then
+  DURATION=$(get_session_duration "$STARTED_AT")
+  FILE_COUNT=$(count_output_files "$OUTPUT_DIR")
+  DONE_REASON=$(cat "$SUMMARY_FLAG" 2>/dev/null || echo "completed")
+  python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "completed" "$DONE_REASON" 2>/dev/null || true
+  echo "Auto-Explorer: Task completed!"
+  echo ""
+  echo "   Topic:      $TOPIC"
+  echo "   Mode:       $MODE"
+  echo "   Iterations: $ITERATION"
+  echo "   Duration:   $DURATION"
+  echo "   Files:      $FILE_COUNT documents in $OUTPUT_DIR/"
+  echo "   Summary:    $OUTPUT_DIR/summary.md"
+  echo ""
+  echo "   Next steps: Review summary with 'cat $OUTPUT_DIR/summary.md'"
+  rm -f "$STATE_FILE" "$SUMMARY_FLAG"
+  exit 0
+fi
+
 # Check if max iterations reached (only if set > 0)
 if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $ITERATION -ge $MAX_ITERATIONS ]]; then
   DURATION=$(get_session_duration "$STARTED_AT")
@@ -168,20 +189,45 @@ if [[ "$HAVE_TRANSCRIPT" == true ]] && grep -q '"role":"assistant"' "$TRANSCRIPT
   IFS="$SEP" read -r EXPLORE_DONE NEXT_SUBTOPIC <<< "$TAGS"
 
   if [[ -n "$EXPLORE_DONE" ]]; then
-    DURATION=$(get_session_duration "$STARTED_AT")
-    FILE_COUNT=$(count_output_files "$OUTPUT_DIR")
-    python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "completed" "$EXPLORE_DONE" 2>/dev/null || true
-    echo "Auto-Explorer: Task completed!"
-    echo ""
-    echo "   Topic:      $TOPIC"
-    echo "   Mode:       $MODE"
-    echo "   Iterations: $ITERATION"
-    echo "   Duration:   $DURATION"
-    echo "   Files:      $FILE_COUNT documents in $OUTPUT_DIR/"
-    echo "   Summary:    $EXPLORE_DONE"
-    echo ""
-    echo "   Next steps: Review findings with 'cat $OUTPUT_DIR/_index.md'"
-    rm -f "$STATE_FILE"
+    # Auto-export: inject summary generation prompt before ending
+    echo "$EXPLORE_DONE" > "$SUMMARY_FLAG"
+
+    if [[ "$MODE" == "build" ]]; then
+      SUMMARY_PROMPT="Your build task '$TOPIC' is complete: $EXPLORE_DONE
+
+Before ending, write a comprehensive summary report to $OUTPUT_DIR/summary.md.
+
+## What to include:
+1. **Overview** — What was built and why
+2. **Architecture** — Key technical decisions and structure
+3. **Deliverables** — List of all files created/modified with one-line descriptions
+4. **Testing** — Test coverage and results
+5. **Known limitations** — What could be improved in the future
+6. **How to use** — Quick start instructions for the end result
+
+Also update $OUTPUT_DIR/_index.md with the final state.
+
+Do NOT include <explore-next> or <explore-done> tags — this is the final wrap-up."
+    else
+      SUMMARY_PROMPT="Your research on '$TOPIC' is complete: $EXPLORE_DONE
+
+Before ending, write a comprehensive summary report to $OUTPUT_DIR/summary.md.
+
+## What to include:
+1. **Executive summary** — Key findings in 3-5 bullet points
+2. **Topic coverage** — What areas were explored and key insights from each
+3. **File index** — All research files with one-line descriptions
+4. **Connections** — How different sub-topics relate to each other
+5. **Open questions** — What remains unexplored or uncertain
+6. **Recommended next steps** — Actionable suggestions for deeper exploration
+
+Also update $OUTPUT_DIR/_index.md with the final state.
+
+Do NOT include <explore-next> or <explore-done> tags — this is the final wrap-up."
+    fi
+
+    SYSTEM_MSG="Auto-Explorer FINAL SUMMARY | Mode: ${MODE} | Topic: $TOPIC | Writing summary.md before session ends"
+    python "$SCRIPT_DIR/scripts/helpers.py" json-output "$SUMMARY_PROMPT" "$SYSTEM_MSG"
     exit 0
   fi
 fi

@@ -195,6 +195,9 @@ Step by step / 逐步說明:
 5. **Completion signal / 完成信號**: In build mode, Claude emits `<explore-done>` when the task is genuinely done and no more enhancements are worthwhile.
    建置模式下，Claude 在任務完成且無值得的增強後發出 `<explore-done>`。
 
+6. **Auto-export / 自動匯出**: When the session ends via `<explore-done>`, Auto-Explorer automatically injects one final prompt to generate a comprehensive `summary.md` — no manual export needed.
+   當 session 透過 `<explore-done>` 結束時，Auto-Explorer 自動注入最後一個提示詞來產生完整的 `summary.md` — 不需要手動匯出。
+
 ---
 
 ## Rate Limits / 速率限制
@@ -280,6 +283,7 @@ auto-explorer/
     test_tag_extraction.py            # Tag extraction tests / 標籤提取測試
     test_mode_detection.py            # Build/research mode detection tests / 模式偵測測試
     test_helpers.py                   # Shared helpers tests / 共用工具測試
+    test_auto_export.py               # Auto-export summary tests / 自動匯出測試
     test_bash_syntax.py               # Bash script syntax validation / Bash 腳本語法驗證
     test_version_consistency.py       # Version consistency checks / 版本一致性檢查
     conftest.py                       # Shared test config / 共用測試設定
@@ -287,6 +291,7 @@ auto-explorer/
   .gitignore                          # Git ignore rules / Git 忽略規則
   CHANGELOG.md                        # Version history / 版本歷史
   developer_guide.md                  # Developer guide / 開發者指南
+  SCENARIOS.md                        # Scenarios & use cases / 情境與使用案例
   README.md                           # This file / 本文件
 ```
 
@@ -315,8 +320,8 @@ Auto-Explorer 與 Ralph Loop 使用不同的狀態檔，資料互不干擾。但
 ### Running tests / 執行測試
 
 ```bash
-# Run all tests (85 tests)
-# 執行全部測試（85 個）
+# Run all tests (94 tests)
+# 執行全部測試（94 個）
 python -m pytest tests/ -v
 
 # Run a specific test file

@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Autonomous exploration and interest tracking system for Claude Code",
-    "version": "1.3.0"
+    "version": "1.4.0"
   },
   "plugins": [
     {
       "name": "auto-explorer",
       "source": "./",
       "description": "Autonomous exploration and interest tracking system. Claude self-directs multi-iteration research on any topic, writing structured findings and dynamically choosing next sub-topics each round.",
-      "version": "1.3.0",
+      "version": "1.4.0",
       "author": {
         "name": "ywcha"
       },

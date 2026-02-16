@@ -2,7 +2,7 @@
 description: "Cancel active Auto-Explorer session"
 allowed-tools:
   - "Bash(test -f .claude/auto-explorer.local.md:*)"
-  - "Bash(rm .claude/auto-explorer.local.md)"
+  - "Bash(rm -f .claude/auto-explorer.local.md .claude/auto-explorer-summary-pending)"
   - "Bash(python *history.py end*)"
   - "Read(.claude/auto-explorer.local.md)"
 hide-from-slash-command-tool: "true"
@@ -22,9 +22,9 @@ If the file exists:
    ```bash
    python "${CLAUDE_PLUGIN_ROOT}/scripts/history.py" end "<topic_slug>" "<iteration>" "cancelled" "Cancelled by user"
    ```
-3. Remove the state file:
+3. Remove the state file and any pending summary flag:
    ```bash
-   rm .claude/auto-explorer.local.md
+   rm -f .claude/auto-explorer.local.md .claude/auto-explorer-summary-pending
    ```
 4. Report to the user:
    - Confirm cancellation

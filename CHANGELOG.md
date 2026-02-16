@@ -5,6 +5,19 @@ All notable changes to Auto-Explorer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-02-16
+
+### Added
+- **Auto-export summary on session completion**: When `<explore-done>` is detected, Auto-Explorer automatically injects one more prompt asking Claude to generate a comprehensive `summary.md` before ending the session — mode-aware prompts for both build and research modes
+- `tests/test_auto_export.py`: 9 tests validating auto-export flag file consistency, prompt content, and cleanup across stop-hook.sh, cancel-explore, and .gitignore
+- `SCENARIOS.md`: Comprehensive bilingual (EN/ZH) scenarios and introduction document covering all existing features and future directions — research mode, build mode, CJK support, monitoring, target audiences, and planned features (compare mode, audit mode, session resume, fresh context, templates, HTML export, custom stop conditions)
+
+### Changed
+- `stop-hook.sh`: `<explore-done>` handler now creates a `.claude/auto-explorer-summary-pending` flag file and injects a summary generation prompt instead of immediately ending — the next stop-hook invocation detects the flag and ends the session with the summary path in the completion message
+- `cancel-explore/SKILL.md`: Now cleans up the summary-pending flag file alongside the state file
+- `.gitignore`: Added `.claude/auto-explorer-summary-pending` to ignored files
+- Total test count: 85 → 94
+
 ## [1.3.0] - 2026-02-16
 
 ### Added
