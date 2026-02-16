@@ -29,7 +29,14 @@ Start an autonomous exploration session.
   - `moderate` = stop at 60% account usage (default)
   - `aggressive` = stop at 80% account usage
 - `--mode research|build` — Force mode instead of auto-detecting from topic wording
+- `--compare` — Shorthand for `--template comparison` (structured side-by-side comparison with evaluation criteria, scoring matrix, and verdict)
+- `--template <name>` — Use an exploration template for structured output:
+  - `deep-dive` — Exhaustive research covering theory, practice, ecosystem, and edge cases
+  - `quickstart` — Practical focus with working examples, get productive fast
+  - `architecture-review` — Structural analysis of a codebase (dependencies, patterns, risks)
+  - `security-audit` — Security-focused analysis (vulnerabilities, attack surface, hardening)
 - `--max-iterations N` — Optional hard cap on iterations (default: unlimited)
+- `--resume [slug]` — Resume a previous session that was rate-limited, max-iterations, cancelled, or errored. If slug is omitted, resumes the most recent one. The session continues writing to the same output directory with full context of previous progress.
 
 **Examples:**
 ```
@@ -38,14 +45,43 @@ Start an autonomous exploration session.
 /auto-explore --budget aggressive distributed consensus algorithms
 /auto-explore --max-iterations 30 Go generics
 /auto-explore --mode research build system internals
+/auto-explore --compare React vs Vue vs Svelte
+/auto-explore --template deep-dive Kubernetes
+/auto-explore --template quickstart FastAPI
+/auto-explore --template architecture-review
+/auto-explore --template security-audit
 /auto-explore
+/auto-explore --resume
+/auto-explore --resume rust-async
+/auto-explore --resume rust-async --budget aggressive
 ```
 
 ### `/cancel-explore`
 Cancel the currently running exploration loop.
 
+### `/explore-steer <direction>`
+Redirect the active session without cancelling it. The direction change takes effect on the next iteration.
+
+**Examples:**
+```
+/explore-steer Focus more on practical examples, less theory
+/explore-steer Skip performance section, go deeper into security
+/explore-steer 請專注在效能比較
+```
+
 ### `/explore-status`
 Show the session dashboard — active session, today's sessions, and recent history.
+
+### `/explore-export [session-slug]`
+Generate a single-file HTML report from a session's Markdown findings.
+
+**Examples:**
+```
+/explore-export                     # export active or most recent session
+/explore-export rust-async          # export specific session
+```
+
+The report includes sidebar navigation, dark/light mode, responsive layout, and is completely self-contained (no external dependencies).
 
 ### `/explore-help`
 Show this help message.
@@ -116,6 +152,10 @@ claude --dangerously-skip-permissions
 /auto-explore Rust async programming
 ```
 
+## Want more examples?
+
+See `SCENARIOS.md` in the plugin directory for detailed use cases, target audiences, and future directions — available in English and Traditional Chinese.
+
 ## Links
 
 - Rate limit config: `~/.claude/auto-explorer-limits.json`
@@ -123,3 +163,4 @@ claude --dangerously-skip-permissions
 - State file: `.claude/auto-explorer.local.md`
 - Session history: `auto-explore-findings/.history.json`
 - Findings: `auto-explore-findings/<topic>/`
+- Scenarios & use cases: `SCENARIOS.md` (in plugin directory)

@@ -2,6 +2,7 @@
 auto-explore-findings/
 .claude/auto-explorer.local.md
 .claude/auto-explorer-summary-pending
+.claude/auto-explorer-steer.md
 *.tmp.*
 
 # OS files

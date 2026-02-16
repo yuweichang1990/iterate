@@ -9,12 +9,17 @@ CLI subcommands:
   parse-frontmatter <file> <sep>          Parse state file frontmatter
   make-slug-and-mode <topic> <sep>        Generate slug and detect mode
   extract-tags <sep>                      Extract explore-* tags from stdin
+  active-info <state_file> <sep>          Get topic, mode, iteration, duration from active session
+  validate-limits <limits_file>           Validate rate limits JSON config
   check-stale <state_file>                Check if session is stale (>24h)
   stale-info <state_file> <sep>           Get topic, slug, iteration from stale session
   suggest-topic <interests_file>          Auto-select topic from interests
+  session-stats <transcript> <output_dir> <sep>  Get token count, file count, output KB
   format-duration <started_at>            Format duration from timestamp to now
   format-rate-summary <sep>               Parse rate check JSON from stdin
   extract-json-field <field>              Extract a field from JSON on stdin
+  load-template <name> <dir> [sep]       Load exploration template by name
+  list-templates <dir>                   List available exploration templates
   json-output <reason> <system_message>   Output stop hook JSON response
 """
 
@@ -150,6 +155,25 @@ def check_stale_session(state_file, max_hours=24):
         return False
 
 
+def get_active_info(state_file, sep):
+    """Get topic, mode, iteration, and duration from an active session state file.
+
+    Returns sep-joined string: topic<sep>mode<sep>iteration<sep>duration
+    """
+    try:
+        with open(state_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        fields = parse_frontmatter(content)
+        topic = fields.get('topic', 'unknown')
+        mode = fields.get('mode', '?')
+        iteration = fields.get('iteration', '0')
+        started = fields.get('started_at', '')
+        duration = format_duration(started) if started else '?'
+        return sep.join([topic, mode, iteration, duration])
+    except Exception:
+        return sep.join(['unknown', '?', '0', '?'])
+
+
 def get_stale_info(state_file, sep):
     """Get topic, slug, and iteration from a stale session state file.
 
@@ -174,6 +198,16 @@ def suggest_topic(interests_file):
 
     Returns the suggestion text, or empty string if none found.
     """
+    topics = suggest_topics(interests_file, max_count=1)
+    return topics[0] if topics else ''
+
+
+def suggest_topics(interests_file, max_count=3):
+    """Extract up to max_count numbered suggestions from user-interests.md.
+
+    Returns list of suggestion strings (may be empty).
+    """
+    results = []
     try:
         with open(interests_file, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -185,10 +219,12 @@ def suggest_topic(interests_file):
             if in_section and re.match(r'^\d+\.', line.strip()):
                 suggestion = re.sub(r'^\d+\.\s*', '', line.strip())
                 if suggestion and 'No suggestions yet' not in suggestion:
-                    return suggestion
+                    results.append(suggestion)
+                    if len(results) >= max_count:
+                        break
     except Exception:
         pass
-    return ''
+    return results
 
 
 # --- Duration formatting ---
@@ -240,6 +276,179 @@ def format_rate_summary(rate_json, sep):
         return f'yes{sep}{sep}'
 
 
+# --- Rate limits validation ---
+
+def validate_limits_config(filepath):
+    """Validate rate limits JSON config file.
+
+    Returns 'ok' if valid, or an error description string.
+    """
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        return f'invalid JSON: {e}'
+    except FileNotFoundError:
+        return 'file not found'
+    except Exception as e:
+        return f'read error: {e}'
+
+    if not isinstance(data, dict):
+        return 'expected a JSON object at top level'
+
+    rate_limits = data.get('rate_limits')
+    if rate_limits is None:
+        return 'missing "rate_limits" key'
+    if not isinstance(rate_limits, dict):
+        return '"rate_limits" must be an object'
+
+    for window in ('4h', 'daily', 'weekly'):
+        entry = rate_limits.get(window)
+        if entry is None:
+            continue  # Missing windows are allowed (will use defaults)
+        if not isinstance(entry, dict):
+            return f'rate_limits.{window} must be an object'
+        tokens = entry.get('tokens')
+        if tokens is not None and (not isinstance(tokens, (int, float)) or tokens <= 0):
+            return f'rate_limits.{window}.tokens must be a positive number'
+
+    return 'ok'
+
+
+# --- Number abbreviation ---
+
+def abbreviate_number(n):
+    """Abbreviate large numbers for display: 281140 → '281k', 4100000 → '4.1M'."""
+    if n >= 1_000_000:
+        val = n / 1_000_000
+        return f'{val:.1f}M' if val != int(val) else f'{int(val)}M'
+    if n >= 1_000:
+        val = n / 1_000
+        return f'{val:.0f}k'
+    return str(n)
+
+
+# --- Template loading ---
+
+def load_template(template_name, templates_dir):
+    """Load an exploration template by name.
+
+    Templates are .md files in templates_dir with frontmatter (name, description,
+    mode) and a body containing the exploration instructions. The body supports
+    placeholders: {{TOPIC}}, {{OUTPUT_DIR}}.
+
+    Returns dict with keys: name, description, mode, body.
+    Raises FileNotFoundError if template not found.
+    """
+    import os
+    # Try exact name, then with .md suffix
+    candidates = [
+        os.path.join(templates_dir, template_name),
+        os.path.join(templates_dir, template_name + '.md'),
+    ]
+    filepath = None
+    for c in candidates:
+        if os.path.isfile(c):
+            filepath = c
+            break
+    if filepath is None:
+        raise FileNotFoundError(f'Template not found: {template_name}')
+
+    with open(filepath, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    fields = parse_frontmatter(content)
+
+    # Extract body (everything after the closing ---)
+    body = ''
+    lines = content.split('\n')
+    in_fm = False
+    body_start = 0
+    for i, line in enumerate(lines):
+        if line.strip() == '---':
+            if in_fm:
+                body_start = i + 1
+                break
+            in_fm = True
+    body = '\n'.join(lines[body_start:]).strip()
+
+    return {
+        'name': fields.get('name', template_name),
+        'description': fields.get('description', ''),
+        'mode': fields.get('mode', ''),
+        'body': body,
+    }
+
+
+def list_templates(templates_dir):
+    """List available templates in the templates directory.
+
+    Returns list of dicts with keys: name, description, mode.
+    """
+    import os
+    templates = []
+    if not os.path.isdir(templates_dir):
+        return templates
+    for fname in sorted(os.listdir(templates_dir)):
+        if not fname.endswith('.md') or fname == 'README.md':
+            continue
+        try:
+            tpl = load_template(fname, templates_dir)
+            templates.append({
+                'name': tpl['name'],
+                'description': tpl['description'],
+                'mode': tpl['mode'],
+            })
+        except Exception:
+            continue
+    return templates
+
+
+# --- Session stats ---
+
+def get_session_stats(transcript_path, output_dir):
+    """Get session stats: estimated output tokens, files written, total output KB.
+
+    Reads the transcript JSONL to count output_tokens, and scans the output
+    directory for file count and total size.
+
+    Returns (tokens, files_written, total_kb) tuple.
+    """
+    import os
+
+    tokens = 0
+    if transcript_path and os.path.isfile(transcript_path):
+        try:
+            with open(transcript_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                        usage = entry.get('usage', {})
+                        tokens += usage.get('output_tokens', 0)
+                    except json.JSONDecodeError:
+                        continue
+        except Exception:
+            pass
+
+    files_written = 0
+    total_bytes = 0
+    if output_dir and os.path.isdir(output_dir):
+        for name in os.listdir(output_dir):
+            fpath = os.path.join(output_dir, name)
+            if os.path.isfile(fpath):
+                files_written += 1
+                try:
+                    total_bytes += os.path.getsize(fpath)
+                except OSError:
+                    pass
+
+    total_kb = round(total_bytes / 1024, 1)
+    return tokens, files_written, total_kb
+
+
 # --- CLI interface ---
 
 def main():
@@ -278,6 +487,12 @@ def main():
         except Exception:
             print(sep)
 
+    elif cmd == 'active-info':
+        print(get_active_info(sys.argv[2], sys.argv[3]))
+
+    elif cmd == 'validate-limits':
+        print(validate_limits_config(sys.argv[2]))
+
     elif cmd == 'check-stale':
         print('yes' if check_stale_session(sys.argv[2]) else 'no')
 
@@ -286,6 +501,12 @@ def main():
 
     elif cmd == 'suggest-topic':
         print(suggest_topic(sys.argv[2]))
+
+    elif cmd == 'suggest-topics':
+        max_count = int(sys.argv[3]) if len(sys.argv) > 3 else 3
+        sep = sys.argv[4] if len(sys.argv) > 4 else '\n'
+        topics = suggest_topics(sys.argv[2], max_count=max_count)
+        print(sep.join(topics))
 
     elif cmd == 'format-duration':
         print(format_duration(sys.argv[2]))
@@ -299,6 +520,32 @@ def main():
             print(data.get(sys.argv[2], ''))
         except Exception:
             print('')
+
+    elif cmd == 'session-stats':
+        transcript_path = sys.argv[2] if len(sys.argv) > 2 else ''
+        output_dir = sys.argv[3] if len(sys.argv) > 3 else ''
+        sep = sys.argv[4] if len(sys.argv) > 4 else '\n'
+        tokens, files, kb = get_session_stats(transcript_path, output_dir)
+        print(f'{tokens}{sep}{files}{sep}{kb}')
+
+    elif cmd == 'load-template':
+        template_name = sys.argv[2]
+        templates_dir = sys.argv[3]
+        sep = sys.argv[4] if len(sys.argv) > 4 else '\n'
+        try:
+            tpl = load_template(template_name, templates_dir)
+            # Output: name<sep>mode<sep>body
+            print(f"{tpl['name']}{sep}{tpl['mode']}{sep}{tpl['body']}")
+        except FileNotFoundError as e:
+            print(str(e), file=sys.stderr)
+            sys.exit(1)
+
+    elif cmd == 'list-templates':
+        templates_dir = sys.argv[2]
+        sep = sys.argv[3] if len(sys.argv) > 3 else '\n'
+        templates = list_templates(templates_dir)
+        for tpl in templates:
+            print(f"  {tpl['name']:20s} {tpl['description']}")
 
     elif cmd == 'json-output':
         print(json.dumps({

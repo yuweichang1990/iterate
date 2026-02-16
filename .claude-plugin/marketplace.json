@@ -5,15 +5,15 @@
     "name": "ywcha"
   },
   "metadata": {
-    "description": "Autonomous exploration and interest tracking system for Claude Code",
-    "version": "1.4.0"
+    "description": "Run Claude autonomously for hours — research topics or build features in a self-directing loop with exploration templates, HTML export, compare mode, budget control, session resume, and mid-session steering",
+    "version": "1.7.0"
   },
   "plugins": [
     {
       "name": "auto-explorer",
       "source": "./",
-      "description": "Autonomous exploration and interest tracking system. Claude self-directs multi-iteration research on any topic, writing structured findings and dynamically choosing next sub-topics each round.",
-      "version": "1.4.0",
+      "description": "Run Claude autonomously for hours — not minutes. One command starts a multi-iteration loop: research any topic or build features with automatic planning, enhancement, and structured Markdown output. Exploration templates (deep-dive, quickstart, architecture-review, security-audit, comparison), HTML report export, compare mode, session resume, interactive steering, token usage reports, budget-controlled rate limiting, dual research/build modes, CJK/bilingual support, and auto-generated summaries.",
+      "version": "1.7.0",
       "author": {
         "name": "ywcha"
       },

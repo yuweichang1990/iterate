@@ -6,7 +6,8 @@ Manages session history in auto-explore-findings/.history.json
 
 Subcommands:
   add <topic> <mode> <slug> <budget> <threshold> <started_at> <output_dir>
-  end <slug> <iterations> <status> [reason]
+  end <slug> <iterations> <status> [reason] [estimated_tokens] [files_written] [total_output_kb]
+  resume [slug] <sep>   — Find resumable session, mark as 'resumed', print info
   show
 """
 
@@ -82,14 +83,20 @@ def cmd_add(args):
 
 
 def cmd_end(args):
-    """Mark the most recent matching session as ended."""
+    """Mark the most recent matching session as ended.
+
+    Usage: history.py end <slug> <iterations> <status> [reason] [estimated_tokens] [files_written] [total_output_kb]
+    """
     if len(args) < 3:
-        print("Usage: history.py end <slug> <iterations> <status> [reason]", file=sys.stderr)
+        print("Usage: history.py end <slug> <iterations> <status> [reason] [estimated_tokens] [files_written] [total_output_kb]", file=sys.stderr)
         sys.exit(1)
     slug = args[0]
     iterations = int(args[1])
     status = args[2]
     reason = args[3] if len(args) > 3 else ""
+    estimated_tokens = int(args[4]) if len(args) > 4 and args[4] else 0
+    files_written = int(args[5]) if len(args) > 5 and args[5] else 0
+    total_output_kb = float(args[6]) if len(args) > 6 and args[6] else 0.0
 
     history = load_history()
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -101,9 +108,62 @@ def cmd_end(args):
             entry["status"] = status
             entry["reason"] = reason
             entry["ended_at"] = now_str
+            entry["estimated_tokens"] = estimated_tokens
+            entry["files_written"] = files_written
+            entry["total_output_kb"] = total_output_kb
             break
 
     save_history(history)
+
+
+RESUMABLE_STATUSES = {"rate-limited", "max-iterations", "cancelled", "error"}
+
+
+def cmd_resume(args):
+    """Find a resumable session, mark it as 'resumed', and print its info.
+
+    Usage: history.py resume [slug] <sep>
+    If slug is omitted, finds the most recent resumable session.
+    Prints sep-joined: topic, mode, slug, output_dir, threshold, iterations, budget
+    """
+    if len(args) < 1:
+        print("Usage: history.py resume [slug] <sep>", file=sys.stderr)
+        sys.exit(1)
+
+    # Last arg is always sep; slug is optional
+    if len(args) == 1:
+        slug = None
+        sep = args[0]
+    else:
+        slug = args[0]
+        sep = args[1]
+
+    history = load_history()
+
+    target = None
+    for entry in reversed(history):
+        if entry.get("status") not in RESUMABLE_STATUSES:
+            continue
+        if slug and entry.get("slug") != slug:
+            continue
+        target = entry
+        break
+
+    if not target:
+        sys.exit(1)
+
+    target["status"] = "resumed"
+    save_history(history)
+
+    print(sep.join([
+        target.get("topic", ""),
+        target.get("mode", "research"),
+        target.get("slug", ""),
+        target.get("output_dir", ""),
+        str(target.get("threshold", 0.6)),
+        str(target.get("iterations", 1)),
+        target.get("budget", "moderate"),
+    ]))
 
 
 def format_duration(started_str, ended_str=None):
@@ -130,6 +190,7 @@ def status_icon(status):
         "rate-limited": "$$",
         "cancelled": "--",
         "max-iterations": "##",
+        "resumed": "->",
         "error": "!!",
     }.get(status, "??")
 
@@ -138,6 +199,19 @@ def cmd_show():
     """Display the dashboard."""
     history = load_history()
     state_file = Path(".claude/auto-explorer.local.md")
+
+    # Import abbreviate_number from helpers (used for token display throughout)
+    abbrev = str  # fallback: just convert to string
+    try:
+        script_dir = Path(__file__).parent
+        helpers_spec = importlib.util.spec_from_file_location(
+            "helpers", str(script_dir / "helpers.py")
+        )
+        helpers_mod = importlib.util.module_from_spec(helpers_spec)
+        helpers_spec.loader.exec_module(helpers_mod)
+        abbrev = helpers_mod.abbreviate_number
+    except Exception:
+        pass
 
     # Check for active session
     active = None
@@ -181,19 +255,19 @@ def cmd_show():
         print(f"     Mode:      {mode}")
         print(f"     Iteration: {iteration}")
         print(f"     Running:   {duration}")
-        print(f"     Threshold: {float(threshold)*100:.0f}%")
-        print(f"     Started:   {started}")
+        print(f"     Budget:    stops at {float(threshold)*100:.0f}%")
 
         # Show rate limit usage if check-rate-limits.py is available
         try:
-            script_dir = Path(__file__).parent
             spec = importlib.util.spec_from_file_location(
                 "check_rate_limits", str(script_dir / "check-rate-limits.py")
             )
             crl = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(crl)
+
             result = crl.check_limits(threshold_override=float(threshold))
             details = result.get("details", [])
+            threshold_frac = float(threshold)
             usage_parts = []
             for d in details:
                 if "window" in d and "pct" in d:
@@ -203,12 +277,22 @@ def cmd_show():
                     used = d.get("used", 0)
                     bar_len = 20
                     filled = min(int(pct / 100 * bar_len), bar_len)
-                    bar = "#" * filled + "-" * (bar_len - filled)
+                    # Place threshold marker on the bar
+                    threshold_pos = min(int(threshold_frac * bar_len), bar_len)
+                    bar_chars = []
+                    for i in range(bar_len):
+                        if i == threshold_pos:
+                            bar_chars.append("|")
+                        elif i < filled:
+                            bar_chars.append("#")
+                        else:
+                            bar_chars.append("-")
+                    bar = "".join(bar_chars)
                     exceeded = d.get("exceeded", False)
                     marker = " EXCEEDED" if exceeded else ""
-                    usage_parts.append(f"     {window:>6}: [{bar}] {pct:5.1f}%  ({used:,} / {limit:,}){marker}")
+                    usage_parts.append(f"     {window:>6}: [{bar}] {pct:5.1f}%  ({abbrev(used)} / {abbrev(limit)}){marker}")
             if usage_parts:
-                print(f"     --- Rate Limits ---")
+                print(f"     --- Rate Limits (| = stop threshold) ---")
                 for line in usage_parts:
                     print(line)
         except Exception:
@@ -248,6 +332,7 @@ def cmd_show():
         started = entry.get("started_at", "")
         ended = entry.get("ended_at", "")
         output_dir = entry.get("output_dir", "")
+        tokens = entry.get("estimated_tokens", 0)
         icon = status_icon(status)
         duration = format_duration(started, ended) if started else "?"
 
@@ -257,9 +342,11 @@ def cmd_show():
 
         lines = [f"  [{icon}] {time_part}  {duration:>6}  {mode:<8}  {iters:>3} iters  {topic}"]
         if reason and status != "running":
-            lines.append(f"       >> {reason}")
+            lines.append(f"       Result: {reason}")
         if output_dir and status != "running":
-            lines.append(f"       >> {output_dir}/")
+            lines.append(f"       Output: {output_dir}/")
+        if tokens > 0 and status != "running":
+            lines.append(f"       Tokens: ~{abbrev(tokens)} output")
         return "\n".join(lines)
 
     if today_sessions:
@@ -283,9 +370,20 @@ def cmd_show():
     rate_limited = sum(1 for e in history if e.get("status") == "rate-limited")
     cancelled = sum(1 for e in history if e.get("status") == "cancelled")
 
+    # Lifetime stats (token tracking from E-block)
+    total_tokens = sum(e.get("estimated_tokens", 0) for e in history)
+    total_files = sum(e.get("files_written", 0) for e in history)
+    total_kb = sum(e.get("total_output_kb", 0) for e in history)
+    total_iters = sum(e.get("iterations", 0) for e in history if isinstance(e.get("iterations"), int))
+
+    if total_tokens > 0 or total_files > 0:
+        print()
+        print(f"  --- Lifetime Stats ---")
+        print(f"  Sessions: {total} | Iterations: {total_iters} | Est. tokens: ~{abbrev(total_tokens)} output | Files: {total_files} | Output: {total_kb:.1f} KB")
+
     print()
     print(f"  --- Legend ---")
-    print(f"  [>>] running  [OK] completed  [$$] rate-limited  [--] cancelled  [##] max-iters  [!!] error")
+    print(f"  [>>] running  [OK] completed  [$$] rate-limited  [--] cancelled  [##] max-iters  [->] resumed  [!!] error")
     print()
     print(f"  Total: {total} sessions | Completed: {completed} | Rate-limited: {rate_limited} | Cancelled: {cancelled}")
     print("=" * 62)
@@ -301,6 +399,8 @@ if __name__ == "__main__":
         cmd_add(sys.argv[2:])
     elif cmd == "end":
         cmd_end(sys.argv[2:])
+    elif cmd == "resume":
+        cmd_resume(sys.argv[2:])
     elif cmd == "show":
         cmd_show()
     else:

@@ -25,6 +25,9 @@ MAX_ITERATIONS=0
 BUDGET=""
 THRESHOLD=""
 FORCE_MODE=""
+TEMPLATE_NAME=""
+RESUME_MODE=false
+RESUME_SLUG=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -45,7 +48,14 @@ OPTIONS:
                             moderate     = stop at 60% usage (default)
                             aggressive   = stop at 80% usage
   --mode <mode>           Force mode: research or build (default: auto-detect)
+  --compare               Shorthand for --template comparison (structured
+                            side-by-side comparison with evaluation and verdict)
+  --template <name>       Use an exploration template (deep-dive, quickstart,
+                            architecture-review, security-audit, comparison)
   --max-iterations <n>    Optional hard cap on iterations (default: unlimited)
+  --resume [slug]         Resume a previous session that was rate-limited,
+                            max-iterations, cancelled, or errored.
+                            If slug is omitted, resumes the most recent one.
   -h, --help              Show this help message
 
 DESCRIPTION:
@@ -64,7 +74,12 @@ EXAMPLES:
   /auto-explore --budget conservative WebAssembly
   /auto-explore --budget aggressive distributed consensus algorithms
   /auto-explore --max-iterations 30 Go generics
+  /auto-explore --compare React vs Vue vs Svelte
+  /auto-explore --template deep-dive Kubernetes
+  /auto-explore --template quickstart FastAPI
   /auto-explore                              (auto-select from interests)
+  /auto-explore --resume                     (resume most recent session)
+  /auto-explore --resume rust-async          (resume specific session)
 
 STOPPING:
   /cancel-explore           Cancel the current exploration
@@ -109,6 +124,29 @@ HELP_EOF
       FORCE_MODE="$2"
       shift 2
       ;;
+    --compare)
+      TEMPLATE_NAME="comparison"
+      shift
+      ;;
+    --template)
+      if [[ -z "${2:-}" ]]; then
+        echo "Error: --template requires a template name" >&2
+        echo "   Available templates: deep-dive, quickstart, architecture-review, security-audit, comparison" >&2
+        exit 1
+      fi
+      TEMPLATE_NAME="$2"
+      shift 2
+      ;;
+    --resume)
+      RESUME_MODE=true
+      # Optional slug argument (next arg that doesn't start with --)
+      if [[ -n "${2:-}" ]] && [[ ! "$2" =~ ^-- ]]; then
+        RESUME_SLUG="$2"
+        shift 2
+      else
+        shift
+      fi
+      ;;
     *)
       TOPIC_PARTS+=("$1")
       shift
@@ -131,12 +169,179 @@ esac
 # Join topic parts
 TOPIC="${TOPIC_PARTS[*]:-}"
 
+# --- Resume flow ---
+if [[ "$RESUME_MODE" == true ]]; then
+  # Cannot combine --resume with a topic
+  if [[ -n "$TOPIC" ]]; then
+    echo "Error: Cannot use --resume with a topic. The topic comes from the previous session." >&2
+    exit 1
+  fi
+  # Cannot combine --resume with --template
+  if [[ -n "$TEMPLATE_NAME" ]]; then
+    echo "Error: Cannot use --resume with --template. Templates only apply to new sessions." >&2
+    exit 1
+  fi
+
+  # Check for active session first
+  if [[ -f ".claude/auto-explorer.local.md" ]]; then
+    echo "Error: An auto-explorer session is already active." >&2
+    echo "   Use /cancel-explore first, then retry --resume." >&2
+    exit 1
+  fi
+
+  # Check for ralph-loop conflict
+  if [[ -f ".claude/ralph-loop.local.md" ]]; then
+    echo "Error: Ralph Loop is currently active. Use /cancel-ralph first." >&2
+    exit 1
+  fi
+
+  # Find resumable session via history.py
+  if [[ -n "$RESUME_SLUG" ]]; then
+    RESUME_INFO=$(python "$SCRIPT_DIR/history.py" resume "$RESUME_SLUG" "$SEP" 2>/dev/null || echo "")
+  else
+    RESUME_INFO=$(python "$SCRIPT_DIR/history.py" resume "$SEP" 2>/dev/null || echo "")
+  fi
+
+  if [[ -z "$RESUME_INFO" ]]; then
+    echo "Error: No resumable session found." >&2
+    if [[ -n "$RESUME_SLUG" ]]; then
+      echo "   No session with slug '$RESUME_SLUG' is available for resume." >&2
+    fi
+    echo "   Resumable statuses: rate-limited, max-iterations, cancelled, error." >&2
+    echo "   Use /explore-status to see recent sessions." >&2
+    exit 1
+  fi
+
+  IFS="$SEP" read -r R_TOPIC R_MODE R_SLUG R_OUTPUT_DIR R_THRESHOLD R_ITERATIONS R_BUDGET <<< "$RESUME_INFO"
+
+  # Use session values (--budget flag can override threshold)
+  TOPIC="$R_TOPIC"
+  MODE="$R_MODE"
+  TOPIC_SLUG="$R_SLUG"
+  OUTPUT_DIR="$R_OUTPUT_DIR"
+  PREV_ITERATIONS="${R_ITERATIONS:-1}"
+
+  # Use --budget override if provided, else use original session's values
+  if [[ -z "$BUDGET" ]]; then
+    BUDGET="$R_BUDGET"
+    THRESHOLD="$R_THRESHOLD"
+    case "$BUDGET" in
+      conservative) THRESHOLD_PCT=40 ;;
+      aggressive)   THRESHOLD_PCT=80 ;;
+      *)            THRESHOLD_PCT=60 ;;
+    esac
+  fi
+
+  # Override mode if --mode flag was used
+  if [[ -n "$FORCE_MODE" ]]; then
+    MODE="$FORCE_MODE"
+  fi
+
+  # Ensure output dir exists
+  mkdir -p "$OUTPUT_DIR"
+
+  # Read _index.md for context injection
+  INDEX_CONTENT=""
+  INDEX_FILE="$OUTPUT_DIR/_index.md"
+  if [[ -f "$INDEX_FILE" ]]; then
+    INDEX_CONTENT=$(cat "$INDEX_FILE" 2>/dev/null || echo "")
+  fi
+
+  # Create state file with resume context
+  mkdir -p .claude
+  STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  if [[ "$MODE" == "build" ]]; then
+    STATE_BODY="RESUMED SESSION: $TOPIC
+
+Previous session ran $PREV_ITERATIONS iterations. Here is the progress so far:
+
+$INDEX_CONTENT
+
+Continue building from where the previous session left off. Work on the next most important sub-task.
+Write progress to $OUTPUT_DIR/ and update $OUTPUT_DIR/_index.md.
+
+Always end your response with:
+<explore-next>specific next sub-task to implement</explore-next>"
+  else
+    STATE_BODY="RESUMED SESSION: $TOPIC
+
+Previous session ran $PREV_ITERATIONS iterations. Here is the progress so far:
+
+$INDEX_CONTENT
+
+Continue exploring from where the previous session left off. Choose a sub-topic that wasn't covered or needs deeper investigation.
+Write your findings to $OUTPUT_DIR/ and update $OUTPUT_DIR/_index.md.
+
+Always end your response with:
+<explore-next>specific sub-topic to explore next</explore-next>"
+  fi
+
+  cat > .claude/auto-explorer.local.md <<EOF
+---
+active: true
+iteration: $PREV_ITERATIONS
+max_iterations: $MAX_ITERATIONS
+threshold: $THRESHOLD
+mode: $MODE
+topic: "$TOPIC"
+topic_slug: "$TOPIC_SLUG"
+output_dir: "$OUTPUT_DIR"
+started_at: "$STARTED_AT"
+---
+
+$STATE_BODY
+EOF
+
+  # Record new running entry in history
+  python "$SCRIPT_DIR/history.py" add "$TOPIC" "$MODE" "$TOPIC_SLUG" "${BUDGET:-moderate}" "$THRESHOLD" "$STARTED_AT" "$OUTPUT_DIR" 2>/dev/null || true
+
+  # Format display
+  if [[ $MAX_ITERATIONS -gt 0 ]]; then
+    ITER_DISPLAY="$MAX_ITERATIONS (hard cap)"
+  else
+    ITER_DISPLAY="unlimited (rate limit controlled)"
+  fi
+
+  cat <<EOF
+Auto-Explorer RESUMED!
+
+Topic: $TOPIC
+Mode: $MODE
+Output: $OUTPUT_DIR/
+Budget: ${BUDGET:-moderate} (stop at ${THRESHOLD_PCT}% usage)
+Max iterations: $ITER_DISPLAY
+Previous iterations: $PREV_ITERATIONS
+
+Continuing from where the previous session left off.
+Check progress: /explore-status
+Cancel:         /cancel-explore
+EOF
+
+  exit 0
+fi
+
 # If no topic provided, try to auto-select from user-interests.md
 if [[ -z "$TOPIC" ]]; then
   INTERESTS_FILE="$HOME/.claude/user-interests.md"
   if [[ -f "$INTERESTS_FILE" ]]; then
-    # Extract first numbered suggestion from Suggested Next Directions
-    TOPIC=$(python "$SCRIPT_DIR/helpers.py" suggest-topic "$INTERESTS_FILE" 2>/dev/null || echo "")
+    # Extract top suggestions to show the user, pick the first
+    ALL_SUGGESTIONS=$(python "$SCRIPT_DIR/helpers.py" suggest-topics "$INTERESTS_FILE" 3 "$SEP" 2>/dev/null || echo "")
+    if [[ -n "$ALL_SUGGESTIONS" ]]; then
+      # First suggestion becomes the topic
+      TOPIC=$(echo "$ALL_SUGGESTIONS" | head -c "$(echo "$ALL_SUGGESTIONS" | sed "s/$SEP.*//" | wc -c)" | tr -d '\n')
+      IFS="$SEP" read -ra SUGGESTIONS <<< "$ALL_SUGGESTIONS"
+      TOPIC="${SUGGESTIONS[0]}"
+
+      # Show all suggestions so the user knows what was available
+      if [[ ${#SUGGESTIONS[@]} -gt 1 ]]; then
+        echo "Your suggested topics (from interest profile):"
+        for i in "${!SUGGESTIONS[@]}"; do
+          echo "  $((i + 1)). ${SUGGESTIONS[$i]}"
+        done
+        echo ""
+      fi
+    fi
   fi
 
   if [[ -z "$TOPIC" ]]; then
@@ -173,6 +378,15 @@ LIMITS_EOF
   echo ""
 fi
 
+# Validate rate limits config (catch malformed JSON before session starts)
+LIMITS_VALID=$(python "$SCRIPT_DIR/helpers.py" validate-limits "$LIMITS_FILE" 2>/dev/null || echo "error")
+if [[ "$LIMITS_VALID" != "ok" ]]; then
+  echo "Warning: Rate limits config may be malformed: $LIMITS_FILE" >&2
+  echo "   Issue: $LIMITS_VALID" >&2
+  echo "   Rate limiting may not work correctly. See /explore-help for the expected format." >&2
+  echo ""
+fi
+
 # Check for ralph-loop conflict
 if [[ -f ".claude/ralph-loop.local.md" ]]; then
   echo "Warning: Ralph Loop is currently active!" >&2
@@ -197,8 +411,16 @@ if [[ -f ".claude/auto-explorer.local.md" ]]; then
     python "$SCRIPT_DIR/history.py" end "$STALE_SLUG" "$STALE_ITER" "error" "Stale session auto-cleaned (>24h)" 2>/dev/null || true
     rm -f ".claude/auto-explorer.local.md"
   else
+    # Show active session details so the user knows what's running
+    ACTIVE_INFO=$(python "$SCRIPT_DIR/helpers.py" active-info ".claude/auto-explorer.local.md" "$SEP" 2>/dev/null || echo "unknown${SEP}?${SEP}0${SEP}?")
+    IFS="$SEP" read -r ACTIVE_TOPIC ACTIVE_MODE ACTIVE_ITER ACTIVE_DURATION <<< "$ACTIVE_INFO"
     echo "Warning: An auto-explorer session is already active!" >&2
-    echo "   Use /cancel-explore to stop it first, then try again." >&2
+    echo "   Topic:     $ACTIVE_TOPIC" >&2
+    echo "   Mode:      $ACTIVE_MODE" >&2
+    echo "   Iteration: $ACTIVE_ITER" >&2
+    echo "   Running:   $ACTIVE_DURATION" >&2
+    echo "" >&2
+    echo "   Use /cancel-explore to stop it, or /explore-status for details." >&2
     exit 1
   fi
 fi
@@ -213,15 +435,45 @@ if [[ -n "$FORCE_MODE" ]]; then
   MODE="$FORCE_MODE"
 fi
 
+# --- Template loading ---
+TEMPLATE_BODY=""
+if [[ -n "$TEMPLATE_NAME" ]]; then
+  TEMPLATES_DIR="$SCRIPT_DIR/../templates"
+  TPL_RESULT=$(python "$SCRIPT_DIR/helpers.py" load-template "$TEMPLATE_NAME" "$TEMPLATES_DIR" "$SEP" 2>/dev/null)
+  if [[ -z "$TPL_RESULT" ]]; then
+    echo "Error: Template '$TEMPLATE_NAME' not found." >&2
+    echo "   Available templates:" >&2
+    python "$SCRIPT_DIR/helpers.py" list-templates "$TEMPLATES_DIR" 2>/dev/null || true
+    exit 1
+  fi
+  IFS="$SEP" read -r TPL_NAME TPL_MODE TEMPLATE_BODY <<< "$TPL_RESULT"
+  # Template mode overrides auto-detection (but --mode flag overrides template)
+  if [[ -z "$FORCE_MODE" ]] && [[ -n "$TPL_MODE" ]]; then
+    MODE="$TPL_MODE"
+  fi
+  # Replace placeholders in template body
+  TEMPLATE_BODY="${TEMPLATE_BODY//\{\{TOPIC\}\}/$TOPIC}"
+fi
+
 # Create output directory
 OUTPUT_DIR="auto-explore-findings/$TOPIC_SLUG"
 mkdir -p "$OUTPUT_DIR"
+
+# Replace OUTPUT_DIR placeholder in template body (must happen after OUTPUT_DIR is set)
+if [[ -n "$TEMPLATE_BODY" ]]; then
+  TEMPLATE_BODY="${TEMPLATE_BODY//\{\{OUTPUT_DIR\}\}/$OUTPUT_DIR}"
+fi
+
+# Write .topic file for readability (especially useful for CJK hash-based slugs)
+echo "$TOPIC" > "$OUTPUT_DIR/.topic"
 
 # Create state file
 mkdir -p .claude
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-if [[ "$MODE" == "build" ]]; then
+if [[ -n "$TEMPLATE_BODY" ]]; then
+  STATE_BODY="$TEMPLATE_BODY"
+elif [[ "$MODE" == "build" ]]; then
   STATE_BODY="Build: $TOPIC
 
 Write working code in the working directory. Log progress to $OUTPUT_DIR/.
@@ -297,7 +549,7 @@ cat <<EOF
 Auto-Explorer activated!
 
 Topic: $TOPIC
-Mode: $MODE
+Mode: $MODE$(if [[ -n "$TEMPLATE_NAME" ]]; then echo " (template: $TEMPLATE_NAME)"; fi)
 Output: $OUTPUT_DIR/
 Budget: ${BUDGET:-moderate} (stop at ${THRESHOLD_PCT}% usage)
 Max iterations: $ITER_DISPLAY

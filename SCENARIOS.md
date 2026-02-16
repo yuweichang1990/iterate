@@ -173,6 +173,73 @@ Stop the current session gracefully. All findings written so far are preserved.
 
 優雅地停止當前 session。已寫入的所有研究成果都會保留。
 
+### Steer mid-session / 中途轉向
+
+```bash
+/explore-steer Focus more on practical examples, less theory
+/explore-steer Skip performance section, go deeper into security
+/explore-steer 請專注在效能比較
+```
+
+Redirect the active session without cancelling it. The direction change takes effect on the next iteration. It's a one-time directive — if you want persistent direction, modify the topic.
+
+在不取消的情況下重新導向活躍的 session。方向變更在下一輪迭代生效。這是一次性指令 — 如果需要持久的方向，請修改主題。
+
+### Exploration templates / 探索模板
+
+```bash
+/auto-explore --template deep-dive Kubernetes
+/auto-explore --template quickstart FastAPI
+/auto-explore --template architecture-review
+/auto-explore --template security-audit
+```
+
+Pre-configured exploration strategies that shape how Claude structures its research. Each template defines a multi-phase plan optimized for a specific type of exploration:
+
+- **deep-dive**: Exhaustive research covering theory, practice, ecosystem, and edge cases
+- **quickstart**: Practical focus with working code examples — get productive fast
+- **architecture-review**: Structural analysis of a codebase (dependencies, patterns, risks)
+- **security-audit**: Security-focused analysis (vulnerabilities, attack surface, hardening)
+
+Templates override the default mode and instructions while still using the same rate-limiting, steering, and resume infrastructure.
+
+預設的探索策略，定義 Claude 如何結構化研究。每個模板定義了一個多階段計劃，針對特定類型的探索進行優化：deep-dive（詳盡）、quickstart（實務重點）、architecture-review（結構分析）、security-audit（安全審計）。
+
+### Compare mode / 比較模式
+
+```bash
+/auto-explore --compare React vs Vue vs Svelte
+/auto-explore --compare PostgreSQL vs MySQL vs SQLite
+/auto-explore --template comparison Kubernetes vs Docker Swarm
+```
+
+Structured side-by-side comparison with evaluation criteria, scoring matrix, and a clear verdict. Claude first defines evaluation criteria, then analyzes each option individually with evidence, creates a head-to-head comparison table, and concludes with a recommendation for different use cases.
+
+結構化的並排比較，包含評估標準、評分矩陣和明確結論。Claude 先定義評估標準，然後逐一分析每個選項並附上證據，建立對比表格，最後根據不同使用情境給出建議。
+
+### Export HTML report / 匯出 HTML 報告
+
+```bash
+/explore-export                     # export active or most recent session
+/explore-export rust-async          # export specific session
+```
+
+Generate a single-file HTML report from any session's Markdown findings. The report includes a sidebar navigation, dark/light mode, responsive layout, and is completely self-contained — no external CSS or JavaScript needed. HTML reports are also auto-generated when sessions complete.
+
+從任何 session 的 Markdown 研究成果產生單一檔案 HTML 報告。報告包含側邊導航欄、暗色/亮色模式、響應式排版，完全自包含 — 不需要外部 CSS 或 JavaScript。HTML 報告在 session 完成時也會自動產生。
+
+### Resume a previous session / 恢復之前的 Session
+
+```bash
+/auto-explore --resume                     # resume most recent
+/auto-explore --resume rust-async          # resume specific session
+/auto-explore --resume rust-async --budget aggressive  # resume with different budget
+```
+
+Pick up where you left off. When a session is interrupted by rate limits, max-iterations, or cancellation, use `--resume` to continue it. Auto-Explorer reads the previous `_index.md` for full context and continues writing to the same output directory.
+
+從上次中斷的地方繼續。當 session 因速率限制、最大迭代次數或取消而中斷時，使用 `--resume` 繼續。Auto-Explorer 讀取之前的 `_index.md` 獲取完整脈絡，並繼續寫入同一個輸出目錄。
+
 ### Rate limit safety net / 速率限制安全網
 
 Auto-Explorer monitors three time windows (4-hour, daily, weekly) and stops before you hit your plan's usage cap. The defaults are calibrated for typical usage, and you can customize them:
@@ -236,61 +303,17 @@ You want to prototype ideas quickly or generate documentation for your team. Run
 
 ## Future Directions / 未來方向
 
-### Session Resume / Session 恢復
-
-Pick up where you left off. Auto-Explorer saves enough context to continue a previous session without starting over.
-
-從上次中斷的地方繼續。Auto-Explorer 保存足夠的脈絡，讓你不必從頭開始。
-
 ### Fresh Context Mode / 全新上下文模式
 
 For long sessions that approach context window limits, Auto-Explorer will start a new Claude session with a compressed summary of all previous work — getting fresh context while preserving continuity.
 
 對於接近上下文視窗限制的長 session，Auto-Explorer 會啟動新的 Claude session，攜帶所有先前工作的壓縮摘要 — 獲得全新上下文的同時保持連續性。
 
-### Compare Mode / 比較模式
-
-```bash
-/auto-explore --compare "React vs Vue vs Svelte for a new project"
-```
-
-Structured side-by-side comparison with evaluation criteria, pros/cons tables, and a recommendation — not just a list of differences.
-
-結構化的並排比較，包含評估標準、優缺點表格和建議 — 不只是差異列表。
-
-### Audit Mode / 審計模式
-
-```bash
-/auto-explore --mode audit
-```
-
-Point Auto-Explorer at your codebase and get a comprehensive audit: security issues, performance bottlenecks, code quality, dependency risks, and actionable recommendations.
-
-將 Auto-Explorer 指向你的程式碼庫，獲得全面審計：安全問題、效能瓶頸、代碼品質、依賴風險和可行動的建議。
-
 ### Build Mode Auto-Verification / 建置模式自動驗證
 
 After each build iteration, automatically run the project's test suite and use the results to guide the next iteration. Failing tests become the next sub-task.
 
 每次建置迭代後，自動運行專案的測試套件，用結果引導下一輪迭代。失敗的測試成為下一個子任務。
-
-### Exploration Templates / 探索模板
-
-```bash
-/auto-explore --template deep-dive "Kubernetes"
-/auto-explore --template quickstart "FastAPI"
-/auto-explore --template architecture-review
-```
-
-Pre-configured exploration strategies: deep-dive (exhaustive), quickstart (practical focus), architecture-review (structural analysis), security-audit, etc.
-
-預設的探索策略：deep-dive（詳盡）、quickstart（實務重點）、architecture-review（結構分析）、security-audit 等。
-
-### HTML Export / HTML 匯出
-
-Beautiful, shareable HTML reports generated from the Markdown findings — complete with navigation, syntax highlighting, and a table of contents.
-
-從 Markdown 研究成果產生的精美、可分享的 HTML 報告 — 包含導航、語法高亮和目錄。
 
 ### Custom Stop Conditions / 自訂停止條件
 

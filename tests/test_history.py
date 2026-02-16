@@ -183,10 +183,100 @@ class TestStatusIcon(unittest.TestCase):
         self.assertEqual(history.status_icon("rate-limited"), "$$")
         self.assertEqual(history.status_icon("cancelled"), "--")
         self.assertEqual(history.status_icon("max-iterations"), "##")
+        self.assertEqual(history.status_icon("resumed"), "->")
         self.assertEqual(history.status_icon("error"), "!!")
 
     def test_unknown_status(self):
         self.assertEqual(history.status_icon("something-else"), "??")
+
+
+class TestTokenTracking(unittest.TestCase):
+    """Test E-block: token tracking in history entries."""
+
+    def test_end_stores_token_stats(self):
+        """cmd_end should store estimated_tokens, files_written, total_output_kb."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hist_file = Path(tmpdir) / ".history.json"
+            hist_file.write_text(json.dumps([{
+                "topic": "Test",
+                "slug": "test",
+                "status": "running",
+                "iterations": 1,
+            }]), encoding="utf-8")
+            with patch.object(history, "HISTORY_FILE", hist_file):
+                history.cmd_end(["test", "5", "completed", "Done", "12500", "8", "45.2"])
+                data = json.loads(hist_file.read_text(encoding="utf-8"))
+
+            self.assertEqual(data[0]["estimated_tokens"], 12500)
+            self.assertEqual(data[0]["files_written"], 8)
+            self.assertAlmostEqual(data[0]["total_output_kb"], 45.2)
+
+    def test_end_defaults_to_zero_without_stats(self):
+        """cmd_end should default to 0 when stats args are omitted."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hist_file = Path(tmpdir) / ".history.json"
+            hist_file.write_text(json.dumps([{
+                "topic": "Test",
+                "slug": "test",
+                "status": "running",
+                "iterations": 1,
+            }]), encoding="utf-8")
+            with patch.object(history, "HISTORY_FILE", hist_file):
+                history.cmd_end(["test", "3", "rate-limited", "Budget exceeded"])
+                data = json.loads(hist_file.read_text(encoding="utf-8"))
+
+            self.assertEqual(data[0]["estimated_tokens"], 0)
+            self.assertEqual(data[0]["files_written"], 0)
+            self.assertAlmostEqual(data[0]["total_output_kb"], 0.0)
+
+    def test_end_handles_empty_string_stats(self):
+        """cmd_end should handle empty string stats gracefully."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hist_file = Path(tmpdir) / ".history.json"
+            hist_file.write_text(json.dumps([{
+                "topic": "Test",
+                "slug": "test",
+                "status": "running",
+                "iterations": 1,
+            }]), encoding="utf-8")
+            with patch.object(history, "HISTORY_FILE", hist_file):
+                history.cmd_end(["test", "2", "completed", "Done", "", "", ""])
+                data = json.loads(hist_file.read_text(encoding="utf-8"))
+
+            self.assertEqual(data[0]["estimated_tokens"], 0)
+            self.assertEqual(data[0]["files_written"], 0)
+            self.assertAlmostEqual(data[0]["total_output_kb"], 0.0)
+
+
+class TestLifetimeStats(unittest.TestCase):
+    """Test E-block: lifetime stats computation."""
+
+    def test_lifetime_stats_sum(self):
+        """Lifetime stats should sum across all history entries."""
+        entries = [
+            {"estimated_tokens": 5000, "files_written": 3, "total_output_kb": 10.5, "iterations": 5},
+            {"estimated_tokens": 8000, "files_written": 5, "total_output_kb": 20.0, "iterations": 8},
+            {"estimated_tokens": 0, "files_written": 0, "total_output_kb": 0.0, "iterations": 2},
+        ]
+        total_tokens = sum(e.get("estimated_tokens", 0) for e in entries)
+        total_files = sum(e.get("files_written", 0) for e in entries)
+        total_kb = sum(e.get("total_output_kb", 0) for e in entries)
+
+        self.assertEqual(total_tokens, 13000)
+        self.assertEqual(total_files, 8)
+        self.assertAlmostEqual(total_kb, 30.5)
+
+    def test_lifetime_stats_missing_fields(self):
+        """Lifetime stats should default to 0 for entries without token fields."""
+        entries = [
+            {"topic": "Old session"},  # no token fields (pre-E-block entry)
+            {"estimated_tokens": 5000, "files_written": 3, "total_output_kb": 10.5},
+        ]
+        total_tokens = sum(e.get("estimated_tokens", 0) for e in entries)
+        total_files = sum(e.get("files_written", 0) for e in entries)
+
+        self.assertEqual(total_tokens, 5000)
+        self.assertEqual(total_files, 3)
 
 
 if __name__ == "__main__":

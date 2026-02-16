@@ -5,6 +5,73 @@ All notable changes to Auto-Explorer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-02-16
+
+### Added
+- **Exploration templates** (`--template <name>`): Pre-configured exploration strategies that shape how Claude structures research. 5 built-in templates:
+  - `deep-dive` — Exhaustive research covering theory, practice, ecosystem, and edge cases (6-phase structure)
+  - `quickstart` — Practical focus with working code examples, get productive fast (6-phase structure)
+  - `architecture-review` — Structural analysis of a codebase: dependencies, patterns, testing, security, performance (10-phase structure)
+  - `security-audit` — Security-focused analysis: attack surface, input validation, auth, secrets, CVEs, configuration (10-phase structure)
+  - `comparison` — Structured side-by-side evaluation with criteria, scoring matrix, and verdict (4-phase structure)
+- **Compare mode** (`--compare`): Convenience flag for `--template comparison`. Produces structured technology comparisons with evaluation framework, individual analysis per option, head-to-head scoring matrix, and recommendation
+- **HTML export** (`/explore-export [slug]`): Generate navigable single-file HTML reports from session findings. Zero external dependencies. Features: sidebar navigation, dark/light mode (`prefers-color-scheme`), responsive layout, print-friendly, CJK support. Auto-generated on session completion
+- `scripts/export-html.py`: Zero-dependency Markdown→HTML converter with `convert_inline()`, `render_table()`, `md_to_html()`, `generate_report()` functions. Supports headers (h1-h6 with anchors), fenced code blocks, tables, ordered/unordered lists, horizontal rules, bold/italic/code/links
+- `scripts/helpers.py`: `load_template()`, `list_templates()` functions and `load-template`, `list-templates` CLI commands for template loading with frontmatter parsing and `{{TOPIC}}`/`{{OUTPUT_DIR}}` placeholder substitution
+- `.claude/skills/explore-export/SKILL.md`: New slash command skill for on-demand HTML report generation
+- `templates/` directory: 5 built-in template files with YAML frontmatter (name, description, mode) and body with placeholder support
+- `tests/test_export.py`: 33 tests for HTML export (inline conversion, Markdown→HTML, table rendering, report generation, dark mode, responsive CSS, CJK content)
+- `tests/test_templates.py`: 22 tests for template loading, listing, built-in template content validation, documentation checks
+- `tests/test_compare.py`: 15 tests for comparison template, --compare flag, documentation consistency
+
+### Changed
+- `hooks/stop-hook.sh`: Auto-generates HTML report (`report.html`) on session completion alongside summary; completion message shows HTML report path
+- `scripts/setup-auto-explorer.sh`: Added `--template`, `--compare` flags; template body injection replaces default state file body; template mode overrides auto-detection (but `--mode` flag overrides template); `--template` and `--compare` cannot combine with `--resume`
+- `.claude-plugin/plugin.json`: Version 2.0.0; updated description with new features; registered `explore-export` skill
+- `.claude-plugin/marketplace.json`: Version 2.0.0 (3 locations); updated descriptions
+- `.claude/skills/explore-help/SKILL.md`: Documented `--template`, `--compare`, `/explore-export` with descriptions and examples
+- `SCENARIOS.md`: Moved Exploration Templates, HTML Export, Compare Mode, and Audit Mode from "Future Directions" to current features sections
+- Total test count: 155 → 225 (+70 new tests)
+
+## [1.6.0] - 2026-02-16
+
+### Added
+- **Interactive steering** (`/explore-steer`): Redirect an active session mid-flight without cancelling it. Write a direction change that takes effect on the next iteration. Supports both build and research modes with "STEERED by user" indicator in system messages
+- **Session resume** (`--resume [slug]`): Continue a previous session that was rate-limited, max-iterations, cancelled, or errored. Full context injection via `_index.md`, iteration counter continues from where it left off. New "resumed" `[->]` status in history
+- **Token usage reporting**: Session end messages and dashboard now show estimated output tokens, files written, and total output KB. New lifetime stats section in dashboard (total sessions, iterations, tokens, files, output size)
+- `scripts/helpers.py`: `get_session_stats()` function and `session-stats` CLI command for extracting token counts from transcript JSONL and output directory stats
+- `scripts/history.py`: `cmd_resume()` for finding and marking resumable sessions; `RESUMABLE_STATUSES` constant; extended `cmd_end()` with `estimated_tokens`, `files_written`, `total_output_kb` fields
+- `.claude/skills/explore-steer/SKILL.md`: New slash command skill that writes a steer file consumed by the stop hook
+- `tests/test_steer.py`: 13 tests for interactive steering (gitignore, stop hook logic, skill config, help docs)
+- `tests/test_resume.py`: 15 tests for session resume (history resume, status icons, resumable statuses, docs)
+
+### Changed
+- `hooks/stop-hook.sh`: Reads/consumes steer file for direction changes; transcript extraction moved earlier for session stats; all 3 end paths pass token stats to history; end messages show token count and `--resume` hint
+- `scripts/history.py`: Dashboard shows per-session token estimate and lifetime stats section; "resumed" `[->]` status icon added to legend; helpers import moved to top of `cmd_show()` for broader access
+- `.claude/skills/explore-help/SKILL.md`: Documented `/explore-steer` and `--resume` with examples
+- `.gitignore`: Added `.claude/auto-explorer-steer.md`
+- Total test count: 129 → 155
+
+## [1.5.0] - 2026-02-16
+
+### Added
+- **Top-3 topic suggestions**: When running `/auto-explore` without a topic, shows up to 3 suggestions from your interest profile (not just auto-selecting the first one)
+- `scripts/helpers.py`: `get_active_info()`, `validate_limits_config()`, `abbreviate_number()`, `suggest_topics()` functions with corresponding CLI commands (`active-info`, `validate-limits`, `suggest-topics`)
+- `.topic` file created in output directory for CJK slug readability (maps hash-based slugs back to the original topic)
+- Rate limits config validation on startup with warning for malformed JSON
+- Dashboard threshold `|` markers on progress bars showing where the stop threshold is
+- Abbreviated numbers in dashboard (281k, 4.1M instead of raw numbers)
+- `tests/test_helpers.py`: 22 new tests for active-info, validate-limits, abbreviate-number, suggest-topics
+
+### Changed
+- Plugin descriptions optimized in `plugin.json` and `marketplace.json` for better marketplace discovery
+- "Session already active" error now shows topic, mode, iteration, and duration (not just a generic message)
+- Dashboard rate limits header changed to "Rate Limits (| = stop threshold)"
+- History entry labels changed from `>> reason` / `>> output_dir/` to `Result: reason` / `Output: output_dir/`
+- "Resume later" text in stop hook changed to "Continue later: /auto-explore $TOPIC (starts new session)"
+- `.claude/skills/explore-help/SKILL.md`: Added link to SCENARIOS.md
+- Total test count: 94 → 129
+
 ## [1.4.0] - 2026-02-16
 
 ### Added

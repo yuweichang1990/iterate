@@ -94,13 +94,35 @@ get_session_duration() {
   fi
 }
 
+# Get transcript path from hook input (moved early for session stats)
+TRANSCRIPT_PATH=$(echo "$HOOK_INPUT" | python "$SCRIPT_DIR/scripts/helpers.py" extract-json-field transcript_path 2>/dev/null)
+
+HAVE_TRANSCRIPT=false
+if [[ -n "$TRANSCRIPT_PATH" ]] && [[ -f "$TRANSCRIPT_PATH" ]]; then
+  HAVE_TRANSCRIPT=true
+fi
+
+# Compute session stats (tokens, files, output KB) for history tracking
+EST_TOKENS="0"
+FILES_WRITTEN="0"
+OUTPUT_KB="0.0"
+if [[ "$HAVE_TRANSCRIPT" == true ]]; then
+  STATS=$(python "$SCRIPT_DIR/scripts/helpers.py" session-stats "$TRANSCRIPT_PATH" "$OUTPUT_DIR" "$SEP" 2>/dev/null || echo "0${SEP}0${SEP}0.0")
+  IFS="$SEP" read -r EST_TOKENS FILES_WRITTEN OUTPUT_KB <<< "$STATS"
+fi
+
 # Check for summary-pending flag (auto-export: summary was just generated)
 SUMMARY_FLAG=".claude/auto-explorer-summary-pending"
 if [[ -f "$SUMMARY_FLAG" ]]; then
   DURATION=$(get_session_duration "$STARTED_AT")
   FILE_COUNT=$(count_output_files "$OUTPUT_DIR")
   DONE_REASON=$(cat "$SUMMARY_FLAG" 2>/dev/null || echo "completed")
-  python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "completed" "$DONE_REASON" 2>/dev/null || true
+  python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "completed" "$DONE_REASON" "$EST_TOKENS" "$FILES_WRITTEN" "$OUTPUT_KB" 2>/dev/null || true
+  # Auto-generate HTML report on completion
+  HTML_REPORT=""
+  if python "$SCRIPT_DIR/scripts/export-html.py" "$OUTPUT_DIR" 2>/dev/null; then
+    HTML_REPORT="$OUTPUT_DIR/report.html"
+  fi
   echo "Auto-Explorer: Task completed!"
   echo ""
   echo "   Topic:      $TOPIC"
@@ -108,7 +130,11 @@ if [[ -f "$SUMMARY_FLAG" ]]; then
   echo "   Iterations: $ITERATION"
   echo "   Duration:   $DURATION"
   echo "   Files:      $FILE_COUNT documents in $OUTPUT_DIR/"
+  echo "   Tokens:     ~$EST_TOKENS output tokens (est.)"
   echo "   Summary:    $OUTPUT_DIR/summary.md"
+  if [[ -n "$HTML_REPORT" ]]; then
+  echo "   HTML:       $HTML_REPORT"
+  fi
   echo ""
   echo "   Next steps: Review summary with 'cat $OUTPUT_DIR/summary.md'"
   rm -f "$STATE_FILE" "$SUMMARY_FLAG"
@@ -119,7 +145,7 @@ fi
 if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $ITERATION -ge $MAX_ITERATIONS ]]; then
   DURATION=$(get_session_duration "$STARTED_AT")
   FILE_COUNT=$(count_output_files "$OUTPUT_DIR")
-  python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "max-iterations" "Completed all $MAX_ITERATIONS iterations" 2>/dev/null || true
+  python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "max-iterations" "Completed all $MAX_ITERATIONS iterations" "$EST_TOKENS" "$FILES_WRITTEN" "$OUTPUT_KB" 2>/dev/null || true
   echo "Auto-Explorer: Completed all $MAX_ITERATIONS iterations."
   echo ""
   echo "   Topic:      $TOPIC"
@@ -127,18 +153,14 @@ if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $ITERATION -ge $MAX_ITERATIONS ]]; then
   echo "   Iterations: $ITERATION"
   echo "   Duration:   $DURATION"
   echo "   Files:      $FILE_COUNT documents in $OUTPUT_DIR/"
+  echo "   Tokens:     ~$EST_TOKENS output tokens (est.)"
   echo ""
-  echo "   Next steps: Review findings with 'cat $OUTPUT_DIR/_index.md'"
+  echo ""
+  echo "   Next steps:"
+  echo "     - Review findings: cat $OUTPUT_DIR/_index.md"
+  echo "     - Resume session:  /auto-explore --resume $TOPIC_SLUG"
   rm -f "$STATE_FILE"
   exit 0
-fi
-
-# Get transcript path from hook input
-TRANSCRIPT_PATH=$(echo "$HOOK_INPUT" | python "$SCRIPT_DIR/scripts/helpers.py" extract-json-field transcript_path 2>/dev/null)
-
-HAVE_TRANSCRIPT=false
-if [[ -n "$TRANSCRIPT_PATH" ]] && [[ -f "$TRANSCRIPT_PATH" ]]; then
-  HAVE_TRANSCRIPT=true
 fi
 
 # --- Rate limit check (primary stopping mechanism) ---
@@ -155,7 +177,7 @@ if [[ "$HAVE_TRANSCRIPT" == true ]]; then
   if [[ "$RATE_ALLOWED" == "no" ]]; then
     DURATION=$(get_session_duration "$STARTED_AT")
     FILE_COUNT=$(count_output_files "$OUTPUT_DIR")
-    python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "rate-limited" "Rate limit threshold reached" 2>/dev/null || true
+    python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "rate-limited" "Rate limit threshold reached" "$EST_TOKENS" "$FILES_WRITTEN" "$OUTPUT_KB" 2>/dev/null || true
     echo "Auto-Explorer: Rate limit reached — stopping exploration."
     echo ""
     echo "   Topic:      $TOPIC"
@@ -163,6 +185,7 @@ if [[ "$HAVE_TRANSCRIPT" == true ]]; then
     echo "   Iterations: $ITERATION"
     echo "   Duration:   $DURATION"
     echo "   Files:      $FILE_COUNT documents in $OUTPUT_DIR/"
+    echo "   Tokens:     ~$EST_TOKENS output tokens (est.)"
     echo ""
     echo "   Exceeded limits:"
     echo "$RATE_DETAIL"
@@ -170,7 +193,7 @@ if [[ "$HAVE_TRANSCRIPT" == true ]]; then
     echo "   Next steps:"
     echo "     - Review findings: cat $OUTPUT_DIR/_index.md"
     echo "     - Adjust limits:   ~/.claude/auto-explorer-limits.json"
-    echo "     - Resume later:    /auto-explore $TOPIC"
+    echo "     - Resume session:  /auto-explore --resume $TOPIC_SLUG"
     rm -f "$STATE_FILE"
     exit 0
   fi
@@ -241,6 +264,16 @@ if [[ -z "$NEXT_SUBTOPIC" ]]; then
   fi
 fi
 
+# --- Interactive steering ---
+# Check if the user dropped a steer file to redirect the next iteration.
+# The file is consumed (deleted) after reading — it's a one-time directive.
+STEER_FILE=".claude/auto-explorer-steer.md"
+STEER_MSG=""
+if [[ -f "$STEER_FILE" ]]; then
+  STEER_MSG=$(cat "$STEER_FILE" 2>/dev/null || echo "")
+  rm -f "$STEER_FILE"
+fi
+
 # Continue loop - increment iteration
 NEXT_ITERATION=$((ITERATION + 1))
 
@@ -266,7 +299,12 @@ $(if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $NEXT_ITERATION -eq $MAX_ITERATIONS ]]; t
   echo "THIS IS THE FINAL ITERATION. Wrap up any remaining work and write $OUTPUT_DIR/summary.md with a comprehensive summary of what was built."
 fi)
 
-Remember: End your response with <explore-next>next specific sub-task</explore-next> or <explore-done>reason</explore-done> if genuinely complete."
+Remember: End your response with <explore-next>next specific sub-task</explore-next> or <explore-done>reason</explore-done> if genuinely complete.
+$(if [[ -n "$STEER_MSG" ]]; then
+  echo ""
+  echo "USER DIRECTION CHANGE: $STEER_MSG"
+  echo "Adjust your work to follow this guidance."
+fi)"
 else
   NEXT_PROMPT="Continue exploring '$TOPIC'. Iteration $ITER_DISPLAY.
 
@@ -278,7 +316,12 @@ $(if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $NEXT_ITERATION -eq $MAX_ITERATIONS ]]; t
   echo "THIS IS THE FINAL ITERATION. After writing your findings file, also write $OUTPUT_DIR/summary.md with a comprehensive summary of all exploration findings."
 fi)
 
-Remember: End your response with <explore-next>next specific sub-topic</explore-next>"
+Remember: End your response with <explore-next>next specific sub-topic</explore-next>
+$(if [[ -n "$STEER_MSG" ]]; then
+  echo ""
+  echo "USER DIRECTION CHANGE: $STEER_MSG"
+  echo "Adjust your exploration to follow this guidance."
+fi)"
 fi
 
 # Update iteration in state file (atomic update via temp file)
@@ -291,7 +334,11 @@ else
 fi
 
 # Build system message
-SYSTEM_MSG="Auto-Explorer iteration $ITER_DISPLAY | Mode: ${MODE:-research} | Topic: $TOPIC | Sub-topic: $NEXT_SUBTOPIC | Usage: $RATE_SUMMARY"
+STEER_INDICATOR=""
+if [[ -n "$STEER_MSG" ]]; then
+  STEER_INDICATOR=" | STEERED by user"
+fi
+SYSTEM_MSG="Auto-Explorer iteration $ITER_DISPLAY | Mode: ${MODE:-research} | Topic: $TOPIC | Sub-topic: $NEXT_SUBTOPIC | Usage: $RATE_SUMMARY$STEER_INDICATOR"
 
 # Output JSON to block the stop and feed the next prompt
 python "$SCRIPT_DIR/scripts/helpers.py" json-output "$NEXT_PROMPT" "$SYSTEM_MSG"
