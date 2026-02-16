@@ -7,6 +7,7 @@ Manages session history in auto-explore-findings/.history.json
 Subcommands:
   add <topic> <mode> <slug> <budget> <threshold> <started_at> <output_dir>
   end <slug> <iterations> <status> [reason] [estimated_tokens] [files_written] [total_output_kb]
+      [completion_type] [iter_ratio] [output_density] [keywords_json]
   resume [slug] <sep>   — Find resumable session, mark as 'resumed', print info
   show
 """
@@ -86,9 +87,10 @@ def cmd_end(args):
     """Mark the most recent matching session as ended.
 
     Usage: history.py end <slug> <iterations> <status> [reason] [estimated_tokens] [files_written] [total_output_kb]
+                         [completion_type] [iter_ratio] [output_density] [keywords_json]
     """
     if len(args) < 3:
-        print("Usage: history.py end <slug> <iterations> <status> [reason] [estimated_tokens] [files_written] [total_output_kb]", file=sys.stderr)
+        print("Usage: history.py end <slug> <iterations> <status> [reason] [estimated_tokens] [files_written] [total_output_kb] [completion_type] [iter_ratio] [output_density] [keywords_json]", file=sys.stderr)
         sys.exit(1)
     slug = args[0]
     iterations = int(args[1])
@@ -97,6 +99,18 @@ def cmd_end(args):
     estimated_tokens = int(args[4]) if len(args) > 4 and args[4] else 0
     files_written = int(args[5]) if len(args) > 5 and args[5] else 0
     total_output_kb = float(args[6]) if len(args) > 6 and args[6] else 0.0
+    completion_type = args[7] if len(args) > 7 and args[7] else ""
+    iter_ratio = float(args[8]) if len(args) > 8 and args[8] else 0.0
+    output_density = float(args[9]) if len(args) > 9 and args[9] else 0.0
+    keywords_json = args[10] if len(args) > 10 and args[10] else ""
+
+    # Parse keywords from JSON
+    keywords = []
+    if keywords_json:
+        try:
+            keywords = json.loads(keywords_json)
+        except (json.JSONDecodeError, TypeError):
+            keywords = []
 
     history = load_history()
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -111,6 +125,17 @@ def cmd_end(args):
             entry["estimated_tokens"] = estimated_tokens
             entry["files_written"] = files_written
             entry["total_output_kb"] = total_output_kb
+            # Quality signals (v1.8.0)
+            if completion_type or iter_ratio or output_density:
+                entry["quality_signals"] = {}
+                if completion_type:
+                    entry["quality_signals"]["completion_type"] = completion_type
+                if iter_ratio:
+                    entry["quality_signals"]["iterations_vs_budget"] = iter_ratio
+                if output_density:
+                    entry["quality_signals"]["output_density"] = output_density
+            if keywords:
+                entry["keywords"] = keywords
             break
 
     save_history(history)

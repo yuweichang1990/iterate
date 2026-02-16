@@ -277,9 +277,11 @@ auto-explorer/
     check-rate-limits.py              # Rate limit checker / 速率限制檢查
     history.py                        # Session history manager / 歷史管理器
     helpers.py                        # Shared utilities (frontmatter, slug, tags) / 共用工具
+    interest_graph.py                 # Interest graph & Thompson Sampling / 興趣圖譜與推薦引擎
   tests/
     test_check_rate_limits.py         # Rate limit tests / 速率限制測試
     test_history.py                   # History manager tests / 歷史管理器測試
+    test_interest_graph.py            # Interest graph tests / 興趣圖譜測試
     test_tag_extraction.py            # Tag extraction tests / 標籤提取測試
     test_mode_detection.py            # Build/research mode detection tests / 模式偵測測試
     test_helpers.py                   # Shared helpers tests / 共用工具測試
@@ -287,6 +289,8 @@ auto-explorer/
     test_bash_syntax.py               # Bash script syntax validation / Bash 腳本語法驗證
     test_version_consistency.py       # Version consistency checks / 版本一致性檢查
     conftest.py                       # Shared test config / 共用測試設定
+  docs/
+    adr/                              # Architecture Decision Records / 架構決策紀錄
   LICENSE                             # MIT License / MIT 授權
   .gitignore                          # Git ignore rules / Git 忽略規則
   CHANGELOG.md                        # Version history / 版本歷史
@@ -301,9 +305,10 @@ auto-explorer/
 |------|--------|
 | `~/.claude/CLAUDE.md` | Global rules: auto-update interests every session / 全域規則：每次對話自動更新興趣 |
 | `~/.claude/user-interests.md` | Persistent interest profile / 持久化興趣檔案 |
+| `~/.claude/interest-graph.json` | Structured interest graph (auto-migrated from user-interests.md) / 結構化興趣圖譜 |
 | `~/.claude/auto-explorer-limits.json` | Rate limit config / 速率限制設定 |
 | `.claude/auto-explorer.local.md` | Runtime state file (per-project) / 執行時狀態檔（每個專案各自） |
-| `auto-explore-findings/.history.json` | Session history log / Session 歷史紀錄 |
+| `auto-explore-findings/.history.json` | Session history log (with quality signals) / Session 歷史紀錄（含品質信號） |
 
 ---
 
@@ -320,8 +325,8 @@ Auto-Explorer 與 Ralph Loop 使用不同的狀態檔，資料互不干擾。但
 ### Running tests / 執行測試
 
 ```bash
-# Run all tests (94 tests)
-# 執行全部測試（94 個）
+# Run all tests (269 tests)
+# 執行全部測試（269 個）
 python -m pytest tests/ -v
 
 # Run a specific test file

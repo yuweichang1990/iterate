@@ -1,7 +1,7 @@
 {
   "name": "auto-explorer",
-  "description": "Run Claude autonomously for hours — not minutes. One command starts a multi-iteration loop: research any topic or build features with automatic planning, enhancement, and structured Markdown output. Exploration templates (deep-dive, quickstart, architecture-review, security-audit, comparison), HTML report export, compare mode, session resume, interactive steering, token usage reports, budget-controlled rate limiting, dual research/build modes, CJK/bilingual support, and auto-generated summaries.",
-  "version": "1.7.0",
+  "description": "Run Claude autonomously for hours — not minutes. One command starts a multi-iteration loop: research any topic or build features with automatic planning, enhancement, and structured Markdown output. Interest graph with Thompson Sampling suggestions, exploration templates (deep-dive, quickstart, architecture-review, security-audit, comparison), HTML report export, compare mode, session resume, interactive steering, token usage reports, budget-controlled rate limiting, dual research/build modes, CJK/bilingual support, and auto-generated summaries.",
+  "version": "1.8.0",
   "author": {
     "name": "ywcha",
     "email": ""

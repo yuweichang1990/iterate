@@ -117,7 +117,15 @@ if [[ -f "$SUMMARY_FLAG" ]]; then
   DURATION=$(get_session_duration "$STARTED_AT")
   FILE_COUNT=$(count_output_files "$OUTPUT_DIR")
   DONE_REASON=$(cat "$SUMMARY_FLAG" 2>/dev/null || echo "completed")
-  python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "completed" "$DONE_REASON" "$EST_TOKENS" "$FILES_WRITTEN" "$OUTPUT_KB" 2>/dev/null || true
+  # Compute quality signals
+  COMPLETION_TYPE="natural"
+  BUDGET_ITERS=$(python "$SCRIPT_DIR/scripts/helpers.py" budget-iterations "$THRESHOLD" 2>/dev/null || echo "10")
+  ITER_RATIO=$(python -c "print(round(int('$ITERATION')/max(int('$BUDGET_ITERS'),1),2))" 2>/dev/null || echo "0.5")
+  OUTPUT_DENSITY=$(python -c "print(round(float('${OUTPUT_KB:-0}')/max(int('$ITERATION'),1),1))" 2>/dev/null || echo "0")
+  python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "completed" "$DONE_REASON" \
+    "$EST_TOKENS" "$FILES_WRITTEN" "$OUTPUT_KB" \
+    "$COMPLETION_TYPE" "$ITER_RATIO" "$OUTPUT_DENSITY" "" 2>/dev/null || true
+  python "$SCRIPT_DIR/scripts/interest_graph.py" decay 2>/dev/null || true
   # Auto-generate HTML report on completion
   HTML_REPORT=""
   if python "$SCRIPT_DIR/scripts/export-html.py" "$OUTPUT_DIR" 2>/dev/null; then
@@ -145,7 +153,15 @@ fi
 if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $ITERATION -ge $MAX_ITERATIONS ]]; then
   DURATION=$(get_session_duration "$STARTED_AT")
   FILE_COUNT=$(count_output_files "$OUTPUT_DIR")
-  python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "max-iterations" "Completed all $MAX_ITERATIONS iterations" "$EST_TOKENS" "$FILES_WRITTEN" "$OUTPUT_KB" 2>/dev/null || true
+  # Compute quality signals
+  COMPLETION_TYPE="budget_exhausted"
+  BUDGET_ITERS=$(python "$SCRIPT_DIR/scripts/helpers.py" budget-iterations "$THRESHOLD" 2>/dev/null || echo "10")
+  ITER_RATIO=$(python -c "print(round(int('$ITERATION')/max(int('$BUDGET_ITERS'),1),2))" 2>/dev/null || echo "0.5")
+  OUTPUT_DENSITY=$(python -c "print(round(float('${OUTPUT_KB:-0}')/max(int('$ITERATION'),1),1))" 2>/dev/null || echo "0")
+  python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "max-iterations" "Completed all $MAX_ITERATIONS iterations" \
+    "$EST_TOKENS" "$FILES_WRITTEN" "$OUTPUT_KB" \
+    "$COMPLETION_TYPE" "$ITER_RATIO" "$OUTPUT_DENSITY" "" 2>/dev/null || true
+  python "$SCRIPT_DIR/scripts/interest_graph.py" decay 2>/dev/null || true
   echo "Auto-Explorer: Completed all $MAX_ITERATIONS iterations."
   echo ""
   echo "   Topic:      $TOPIC"
@@ -177,7 +193,15 @@ if [[ "$HAVE_TRANSCRIPT" == true ]]; then
   if [[ "$RATE_ALLOWED" == "no" ]]; then
     DURATION=$(get_session_duration "$STARTED_AT")
     FILE_COUNT=$(count_output_files "$OUTPUT_DIR")
-    python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "rate-limited" "Rate limit threshold reached" "$EST_TOKENS" "$FILES_WRITTEN" "$OUTPUT_KB" 2>/dev/null || true
+    # Compute quality signals
+    COMPLETION_TYPE="rate_limited"
+    BUDGET_ITERS=$(python "$SCRIPT_DIR/scripts/helpers.py" budget-iterations "$THRESHOLD" 2>/dev/null || echo "10")
+    ITER_RATIO=$(python -c "print(round(int('$ITERATION')/max(int('$BUDGET_ITERS'),1),2))" 2>/dev/null || echo "0.5")
+    OUTPUT_DENSITY=$(python -c "print(round(float('${OUTPUT_KB:-0}')/max(int('$ITERATION'),1),1))" 2>/dev/null || echo "0")
+    python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "rate-limited" "Rate limit threshold reached" \
+      "$EST_TOKENS" "$FILES_WRITTEN" "$OUTPUT_KB" \
+      "$COMPLETION_TYPE" "$ITER_RATIO" "$OUTPUT_DENSITY" "" 2>/dev/null || true
+    python "$SCRIPT_DIR/scripts/interest_graph.py" decay 2>/dev/null || true
     echo "Auto-Explorer: Rate limit reached — stopping exploration."
     echo ""
     echo "   Topic:      $TOPIC"

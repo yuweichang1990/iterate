@@ -5,6 +5,25 @@ All notable changes to Auto-Explorer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-02-16
+
+### Added
+- **Interest graph** (`scripts/interest_graph.py`): Structured knowledge graph replacing the flat keyword list in `user-interests.md`. Concepts have weighted scores, SKOS-lite relationships (broader/narrower/related), co-occurrence edges, and Thompson Sampling bandit state (alpha/beta) for personalized topic suggestions. Stored at `~/.claude/interest-graph.json`
+- **Thompson Sampling suggestions**: `interest_graph.py suggest <n>` returns ranked topic suggestions that balance exploitation (topics you've engaged with), exploration (under-tried topics), and serendipity (under-connected concepts). Each suggestion includes a reason ("strong interest", "revisit", "unexplored connection", "balanced exploration")
+- **Half-life decay**: 90-day half-life on concept weights — old interests naturally fade, keeping suggestions fresh. Concepts with weight < 0.01 and only 1 session are pruned
+- **Auto-migration**: First run automatically converts existing `~/.claude/user-interests.md` (~170+ keywords) into the structured graph. Non-destructive — original file kept intact
+- **Markdown generation**: `interest_graph.py generate-md` regenerates `user-interests.md` from the graph, preserving the same format that CLAUDE.md instructions expect
+- **Quality signals in session history**: `history.py end` now accepts 4 new optional args: `completion_type` (natural/budget_exhausted/rate_limited), `iterations_vs_budget` (ratio), `output_density` (KB/iter), `keywords_json`. Stored as `quality_signals` and `keywords` fields in `.history.json`
+- **Budget-iterations mapping** (`helpers.py budget-iterations`): Maps threshold to expected iteration count (0.8→5, 0.6→10, 0.5→20) for quality signal computation
+- `docs/adr/0001-interest-graph-memory-system.md`: First Architecture Decision Record documenting the 3-tier memory system design, auto-migration, Thompson Sampling, and quality signals
+- `tests/test_interest_graph.py`: 44 tests across 10 test classes (load/save, add concepts, co-occurrence, decay, Thompson Sampling, bandit feedback, Markdown generation, migration, CLI)
+
+### Changed
+- `hooks/stop-hook.sh`: All 3 exit paths (summary-pending, max-iterations, rate-limited) now compute quality signals (completion_type, iter_ratio, output_density) and pass them to `history.py end`; each exit path also runs `interest_graph.py decay` to keep the interest graph fresh
+- `scripts/history.py`: Extended `cmd_end()` with 4 new optional positional args after the existing 7; session entries gain `quality_signals` dict and `keywords` list
+- `scripts/helpers.py`: Added `budget-iterations` subcommand
+- Total test count: 225 → 269 (+44 new tests)
+
 ## [1.7.0] - 2026-02-16
 
 ### Added

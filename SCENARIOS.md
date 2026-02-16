@@ -228,6 +228,32 @@ Generate a single-file HTML report from any session's Markdown findings. The rep
 
 從任何 session 的 Markdown 研究成果產生單一檔案 HTML 報告。報告包含側邊導航欄、暗色/亮色模式、響應式排版，完全自包含 — 不需要外部 CSS 或 JavaScript。HTML 報告在 session 完成時也會自動產生。
 
+### Interest graph & smart suggestions / 興趣圖譜與智慧推薦
+
+Auto-Explorer builds a structured graph of your interests over time (`~/.claude/interest-graph.json`). Each concept tracks how often you've explored it, when you last touched it, and how it relates to other concepts.
+
+Auto-Explorer 隨時間建立你的結構化興趣圖譜。每個概念追蹤你探索的頻率、最後接觸的時間，以及它與其他概念的關聯。
+
+```bash
+# See what the graph suggests
+# 查看圖譜推薦
+python scripts/interest_graph.py suggest 5
+
+# Output example:
+#   Docker (strong interest, score: 0.891)
+#   WebAssembly (revisit — not seen in a while, score: 0.734)
+#   distributed-consensus (unexplored connection, score: 0.682)
+```
+
+How it works:
+- **Auto-migration**: On first run, your existing `user-interests.md` keywords (~170+) are converted into graph concepts. No manual setup.
+- **Thompson Sampling**: The algorithm learns which suggestions you actually explore (alpha++) vs. ignore (beta++), and adapts over time.
+- **Half-life decay**: Old interests naturally fade (90-day half-life). Topics you haven't touched in months drift down in ranking.
+- **Serendipity bonus**: Under-connected concepts get a novelty boost — so you don't only see the same topics.
+- **Quality signals**: Each session records how it ended (natural / budget exhausted / rate limited), output density, and iteration efficiency.
+
+運作方式：自動遷移（首次運行自動轉換既有關鍵字）、Thompson Sampling（學習你的偏好）、半衰期衰減（90天）、意外發現加分（新穎概念加權）、品質信號（記錄每次 session 的完成方式和效率）。
+
 ### Resume a previous session / 恢復之前的 Session
 
 ```bash
@@ -302,6 +328,28 @@ You want to prototype ideas quickly or generate documentation for your team. Run
 ---
 
 ## Future Directions / 未來方向
+
+### v1.9.0: Improvement Engine / 改進引擎
+
+The interest graph (v1.8.0) lays the foundation. The improvement engine builds on top of it:
+
+興趣圖譜（v1.8.0）打下基礎，改進引擎在此之上建構：
+
+- **Template bandits / 模板推薦**: Thompson Sampling to pick the best exploration template for a given topic. "Deep-dive works better for infrastructure topics, quickstart for frameworks."
+  用 Thompson Sampling 為主題挑選最佳探索模板。
+- **Budget adaptation / 預算適應**: Learn the right budget (conservative/moderate/aggressive) from session history. If your sessions always hit rate limits at 3 iterations, suggest a smaller budget.
+  從歷史學習合適的預算。如果每次都在 3 輪觸及限制，建議更小的預算。
+- **Repeat detection / 重複偵測**: Detect when a topic has been explored before and suggest deepening instead of re-covering. Uses the interest graph's co-occurrence edges.
+  偵測重複主題，建議深入而非重新覆蓋。
+
+### v1.10.0: Advanced Graph Intelligence / 進階圖譜智慧
+
+- **Community detection / 社群偵測**: Label propagation to find natural clusters in your interest graph. "You have a Docker-CI-GitHub cluster and a FastAPI-Pydantic-testing cluster."
+  標籤傳播演算法找出興趣圖譜中的自然叢集。
+- **Gap-based serendipity / 結構缺口推薦**: Find concept pairs that share neighbors but aren't directly connected. "You know Docker and you know GitHub Actions, but you've never explored Docker + GitHub Actions together."
+  找出共享鄰居但未直接連接的概念對。
+- **Prompt evolution / 提示詞進化**: Bandit-based selection of prompt variations that produce better outcomes. Track which system messages lead to higher output density.
+  基於 bandit 的提示詞變體選擇。追蹤哪些系統訊息產生更高的輸出密度。
 
 ### Fresh Context Mode / 全新上下文模式
 

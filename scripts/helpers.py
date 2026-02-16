@@ -20,6 +20,7 @@ CLI subcommands:
   extract-json-field <field>              Extract a field from JSON on stdin
   load-template <name> <dir> [sep]       Load exploration template by name
   list-templates <dir>                   List available exploration templates
+  budget-iterations [threshold]          Map threshold to budget iterations
   json-output <reason> <system_message>   Output stop hook JSON response
 """
 
@@ -546,6 +547,15 @@ def main():
         templates = list_templates(templates_dir)
         for tpl in templates:
             print(f"  {tpl['name']:20s} {tpl['description']}")
+
+    elif cmd == 'budget-iterations':
+        threshold = float(sys.argv[2]) if len(sys.argv) > 2 else 0.6
+        if threshold >= 0.75:
+            print(5)    # conservative
+        elif threshold <= 0.55:
+            print(20)   # aggressive
+        else:
+            print(10)   # moderate
 
     elif cmd == 'json-output':
         print(json.dumps({
