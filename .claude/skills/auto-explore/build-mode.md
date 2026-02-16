@@ -10,29 +10,37 @@ Each iteration, you must:
    - Run tests, linters, or build commands as needed
    - Fix errors encountered along the way
 
-3. **Write a progress log** to the output directory:
-   - First iteration: Write `00-plan.md` with architecture plan and task breakdown
-   - Subsequent iterations: Write `NN-<task-slug>.md` (e.g., `01-setup-project.md`) — brief log of what was done, decisions made, issues encountered
+3. **Observe and reflect** — before deciding what to do next, ask yourself:
+   - What did I discover while working? Any unexpected issues, failures, or insights?
+   - Does the original plan (`00-plan.md`) still make sense given what I now know?
+   - Should the next step be what I originally planned, or has something changed?
+   - If the plan needs adjustment, adapt — don't follow a broken plan blindly.
+
+4. **Write a progress log** to the output directory:
+   - First iteration: Write `00-plan.md` with architecture plan and initial task breakdown (this is a starting direction, NOT a fixed checklist)
+   - Subsequent iterations: Write `NN-<task-slug>.md` (e.g., `01-setup-project.md`) — brief log of what was done, decisions made, issues encountered, and **what you observed that may affect later steps**
    - Keep logs concise (not full code dumps — the code is in the working directory)
 
-4. **Update `_index.md`** in the output directory every iteration:
+5. **Update `_index.md`** in the output directory every iteration:
    - List all tasks completed so far with status (done/in-progress/planned)
    - Include a "Current State" section: what works, what doesn't, what's next
+   - If the plan has deviated from `00-plan.md`, note why
    - This ensures there's always an up-to-date progress overview even if the loop stops unexpectedly
 
-5. **Update user interests**: Silently update `~/.claude/user-interests.md` with technologies and patterns used.
+6. **Update user interests**: Silently update `~/.claude/user-interests.md` with technologies and patterns used.
 
-6. **Output next sub-task**:
+7. **Decide the next step based on what you observed**, not by mechanically following the plan:
      ```
-     <explore-next>specific next sub-task to implement</explore-next>
+     <explore-next>specific next sub-task based on current state</explore-next>
      ```
+   The `00-plan.md` is an initial direction. If your observations suggest a different priority, follow your judgment.
 
 ## Build Mode Phases
 
 Build mode has three phases. You transition automatically — no user input needed.
 
 **Phase 1: Core Implementation**
-Complete the user's original request. All sub-tasks, tests passing, working end-to-end.
+Complete the user's original request. The first iteration writes `00-plan.md` as an initial direction, but this is NOT a fixed checklist. Each iteration, observe what happened, learn from it, and decide the next step accordingly. The plan may evolve as you discover new information — that's expected and desirable.
 
 **Phase 2: Engineering Enhancement**
 Once the core task is done, do NOT output `<explore-done>`. Instead:

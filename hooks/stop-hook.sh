@@ -305,6 +305,8 @@ Current sub-task: $NEXT_SUBTOPIC
 
 Work on the code in the working directory. Write a brief progress log to $OUTPUT_DIR/$FILE_NUM-<descriptive-name>.md and update $OUTPUT_DIR/_index.md with current progress.
 
+After completing the sub-task, reflect: did you discover anything unexpected? Does the original plan still hold, or should you adapt? Base your <explore-next> on what you actually observed, not just the original plan.
+
 $(if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $NEXT_ITERATION -eq $MAX_ITERATIONS ]]; then
   echo "THIS IS THE FINAL ITERATION. Wrap up any remaining work and write $OUTPUT_DIR/summary.md with a comprehensive summary of what was built."
 fi)
