@@ -55,7 +55,7 @@ for line in lines:
     if in_fm and ':' in line:
         key, val = line.split(':', 1)
         fields[key.strip()] = val.strip().strip('\"')
-keys = ['iteration','max_iterations','threshold','topic','topic_slug','output_dir','mode']
+keys = ['iteration','max_iterations','threshold','topic','topic_slug','output_dir','mode','started_at']
 print(sep.join(fields.get(k, '') for k in keys))
 " "$STATE_FILE" "$SEP" 2>/dev/null)
 
@@ -67,7 +67,7 @@ if [[ -z "$PARSED" ]]; then
 fi
 
 # Split values into variables using unit separator
-IFS="$SEP" read -r ITERATION MAX_ITERATIONS THRESHOLD TOPIC TOPIC_SLUG OUTPUT_DIR MODE <<< "$PARSED"
+IFS="$SEP" read -r ITERATION MAX_ITERATIONS THRESHOLD TOPIC TOPIC_SLUG OUTPUT_DIR MODE STARTED_AT <<< "$PARSED"
 
 # Defaults
 if [[ -z "$THRESHOLD" ]]; then THRESHOLD="0.6"; fi
@@ -91,11 +91,53 @@ fi
 # Resolve script directory for history.py
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# Count output files for summary messages (trim wc -l whitespace)
+count_output_files() {
+  local dir="$1"
+  if [[ -d "$dir" ]]; then
+    find "$dir" -maxdepth 1 -name '*.md' -not -name '_index.md' 2>/dev/null | wc -l | tr -d ' '
+  else
+    echo "0"
+  fi
+}
+
+# Format session duration from started_at (passed as $1, not re-read from file)
+get_session_duration() {
+  local started_at="${1:-}"
+  if [[ -n "$started_at" ]]; then
+    python -c "
+import sys
+from datetime import datetime, timezone
+try:
+    start = datetime.fromisoformat(sys.argv[1].replace('Z','+00:00'))
+    delta = datetime.now(timezone.utc) - start
+    mins = int(delta.total_seconds() // 60)
+    if mins >= 60:
+        print(f'{mins//60}h {mins%60}m')
+    else:
+        print(f'{mins}m')
+except Exception:
+    print('?')
+" "$started_at" 2>/dev/null || echo "?"
+  else
+    echo "?"
+  fi
+}
+
 # Check if max iterations reached (only if set > 0)
 if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $ITERATION -ge $MAX_ITERATIONS ]]; then
+  DURATION=$(get_session_duration "$STARTED_AT")
+  FILE_COUNT=$(count_output_files "$OUTPUT_DIR")
   python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "max-iterations" "Completed all $MAX_ITERATIONS iterations" 2>/dev/null || true
-  echo "Auto-Explorer: Completed all $MAX_ITERATIONS iterations on '$TOPIC'."
-  echo "   Findings are in: $OUTPUT_DIR/"
+  echo "Auto-Explorer: Completed all $MAX_ITERATIONS iterations."
+  echo ""
+  echo "   Topic:      $TOPIC"
+  echo "   Mode:       $MODE"
+  echo "   Iterations: $ITERATION"
+  echo "   Duration:   $DURATION"
+  echo "   Files:      $FILE_COUNT documents in $OUTPUT_DIR/"
+  echo ""
+  echo "   Next steps: Review findings with 'cat $OUTPUT_DIR/_index.md'"
   rm -f "$STATE_FILE"
   exit 0
 fi
@@ -140,14 +182,24 @@ print(f'{allowed}{sep}{detail}{sep}{summary}')
   IFS="$SEP" read -r RATE_ALLOWED RATE_DETAIL RATE_SUMMARY <<< "$RATE_PARSED"
 
   if [[ "$RATE_ALLOWED" == "no" ]]; then
+    DURATION=$(get_session_duration "$STARTED_AT")
+    FILE_COUNT=$(count_output_files "$OUTPUT_DIR")
     python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "rate-limited" "Rate limit threshold reached" 2>/dev/null || true
     echo "Auto-Explorer: Rate limit reached — stopping exploration."
-    echo "   Topic: $TOPIC (completed $ITERATION iterations)"
+    echo ""
+    echo "   Topic:      $TOPIC"
+    echo "   Mode:       $MODE"
+    echo "   Iterations: $ITERATION"
+    echo "   Duration:   $DURATION"
+    echo "   Files:      $FILE_COUNT documents in $OUTPUT_DIR/"
+    echo ""
     echo "   Exceeded limits:"
     echo "$RATE_DETAIL"
     echo ""
-    echo "   Findings so far are in: $OUTPUT_DIR/"
-    echo "   Edit ~/.claude/auto-explorer-limits.json to adjust limits."
+    echo "   Next steps:"
+    echo "     - Review findings: cat $OUTPUT_DIR/_index.md"
+    echo "     - Adjust limits:   ~/.claude/auto-explorer-limits.json"
+    echo "     - Resume later:    /auto-explore $TOPIC"
     rm -f "$STATE_FILE"
     exit 0
   fi
@@ -184,11 +236,19 @@ except Exception:
   IFS="$SEP" read -r EXPLORE_DONE NEXT_SUBTOPIC <<< "$TAGS"
 
   if [[ -n "$EXPLORE_DONE" ]]; then
+    DURATION=$(get_session_duration "$STARTED_AT")
+    FILE_COUNT=$(count_output_files "$OUTPUT_DIR")
     python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "completed" "$EXPLORE_DONE" 2>/dev/null || true
     echo "Auto-Explorer: Task completed!"
-    echo "   Topic: $TOPIC (completed in $ITERATION iterations)"
-    echo "   Reason: $EXPLORE_DONE"
-    echo "   Output: $OUTPUT_DIR/"
+    echo ""
+    echo "   Topic:      $TOPIC"
+    echo "   Mode:       $MODE"
+    echo "   Iterations: $ITERATION"
+    echo "   Duration:   $DURATION"
+    echo "   Files:      $FILE_COUNT documents in $OUTPUT_DIR/"
+    echo "   Summary:    $EXPLORE_DONE"
+    echo ""
+    echo "   Next steps: Review findings with 'cat $OUTPUT_DIR/_index.md'"
     rm -f "$STATE_FILE"
     exit 0
   fi
@@ -222,7 +282,7 @@ if [[ "$MODE" == "build" ]]; then
 
 Current sub-task: $NEXT_SUBTOPIC
 
-Work on the code in the working directory. Write a brief progress log to $OUTPUT_DIR/$FILE_NUM-<task-slug>.md.
+Work on the code in the working directory. Write a brief progress log to $OUTPUT_DIR/$FILE_NUM-<descriptive-name>.md and update $OUTPUT_DIR/_index.md with current progress.
 
 $(if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $NEXT_ITERATION -eq $MAX_ITERATIONS ]]; then
   echo "THIS IS THE FINAL ITERATION. Wrap up any remaining work and write $OUTPUT_DIR/summary.md with a comprehensive summary of what was built."
@@ -234,7 +294,7 @@ else
 
 Current sub-topic to research: $NEXT_SUBTOPIC
 
-Write your findings to $OUTPUT_DIR/$FILE_NUM-<subtopic-slug>.md (choose an appropriate filename).
+Write your findings to $OUTPUT_DIR/$FILE_NUM-<descriptive-name>.md and update $OUTPUT_DIR/_index.md with current progress.
 
 $(if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $NEXT_ITERATION -eq $MAX_ITERATIONS ]]; then
   echo "THIS IS THE FINAL ITERATION. After writing your findings file, also write $OUTPUT_DIR/summary.md with a comprehensive summary of all exploration findings."

@@ -165,6 +165,25 @@ for line in content.split('\n'):
   echo ""
 fi
 
+# Auto-create rate limits config if missing (first-use experience)
+LIMITS_FILE="$HOME/.claude/auto-explorer-limits.json"
+if [[ ! -f "$LIMITS_FILE" ]]; then
+  mkdir -p "$HOME/.claude"
+  cat > "$LIMITS_FILE" <<'LIMITS_EOF'
+{
+  "threshold": 0.6,
+  "rate_limits": {
+    "4h":     { "tokens": 700000 },
+    "daily":  { "tokens": 4100000 },
+    "weekly": { "tokens": 29000000 }
+  }
+}
+LIMITS_EOF
+  echo "Created default rate limits config: $LIMITS_FILE"
+  echo "   Edit this file to match your Claude plan's quota."
+  echo ""
+fi
+
 # Check for ralph-loop conflict
 if [[ -f ".claude/ralph-loop.local.md" ]]; then
   echo "Warning: Ralph Loop is currently active!" >&2
@@ -195,8 +214,8 @@ if len(slug) > 50:
 mode = 'research'
 lower_topic = topic.lower().strip()
 build_patterns = [
-    r'^(build|implement|create|develop|fix|refactor|add|make|write|set\s*up|deploy|migrate|convert|port|upgrade)',
-    r'^(設計|建立|開發|實作|修復|重構|新增|部署|撰寫|建置)',
+    r'^(build|implement|create|develop|fix|refactor|add|make|write|set\s*up|deploy|migrate|convert|port|upgrade|improve|optimize|update|configure|install|redesign|integrate|automate|extract|remove|delete|replace|move|rename|split|merge|clean\s*up|debug|patch|scaffold|generate|wire\s*up)',
+    r'^(設計|建立|開發|實作|修復|重構|新增|部署|撰寫|建置|優化|更新|設定|安裝|改善|整合|自動化|提取|刪除|替換|移動|合併|清理|除錯|修補|產生|升級|進化)',
 ]
 for pat in build_patterns:
     if re.search(pat, lower_topic):
@@ -261,6 +280,14 @@ EOF
 
 # Record session in history log
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Detect first-ever session for welcome message
+HISTORY_FILE="auto-explore-findings/.history.json"
+IS_FIRST_SESSION=false
+if [[ ! -f "$HISTORY_FILE" ]]; then
+  IS_FIRST_SESSION=true
+fi
+
 python "$SCRIPT_DIR/history.py" add "$TOPIC" "$MODE" "$TOPIC_SLUG" "${BUDGET:-moderate}" "$THRESHOLD" "$STARTED_AT" "$OUTPUT_DIR" 2>/dev/null || true
 
 # Format display strings
@@ -270,6 +297,21 @@ else
   ITER_DISPLAY="unlimited (rate limit controlled)"
 fi
 
+# First-use welcome message
+if [[ "$IS_FIRST_SESSION" == true ]]; then
+  cat <<'WELCOME_EOF'
+Welcome to Auto-Explorer! Here's what will happen:
+
+  1. Claude will work autonomously, iteration after iteration
+  2. Each round produces output in auto-explore-findings/
+  3. The stop hook monitors your rate limits and stops when budget is reached
+  4. Use /explore-status to check progress, /cancel-explore to stop early
+
+Tip: Run with --budget aggressive to use more quota, or conservative to save it.
+
+WELCOME_EOF
+fi
+
 # Output setup message
 cat <<EOF
 Auto-Explorer activated!
@@ -277,16 +319,9 @@ Auto-Explorer activated!
 Topic: $TOPIC
 Mode: $MODE
 Output: $OUTPUT_DIR/
-Budget: ${BUDGET:-moderate} (stop at ${THRESHOLD_PCT}% account usage)
+Budget: ${BUDGET:-moderate} (stop at ${THRESHOLD_PCT}% usage)
 Max iterations: $ITER_DISPLAY
-Iteration: 1
 
-The stop hook checks your account usage each round.
-Exploration stops when usage reaches ${THRESHOLD_PCT}% of any rate limit window.
-Rate limits configured in: ~/.claude/auto-explorer-limits.json
-
-To monitor: head -15 .claude/auto-explorer.local.md
-To cancel:  /cancel-explore
-
-Starting exploration of: $TOPIC
+Check progress: /explore-status
+Cancel:         /cancel-explore
 EOF

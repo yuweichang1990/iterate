@@ -59,9 +59,10 @@ Auto-Explorer auto-detects the mode from your topic wording:
 | **Research** | Concepts, subjects, questions (e.g., "Rust async programming") | Writes research findings as Markdown reports |
 | **Build** | Action verbs (e.g., "build a REST API", "fix the auth bug") | Writes working code, then autonomously enhances it |
 
-**Build mode** has two phases:
+**Build mode** has three phases:
 1. **Core Implementation** — Complete the requested task
-2. **Autonomous Enhancement** — Review and improve until no more enhancements are worth the added complexity
+2. **Engineering Enhancement** — Fix bugs, improve robustness, add tests
+3. **Product & Strategy** — Evaluate UX friction, onboarding, and competitive positioning
 
 ## How It Works
 

@@ -5,6 +5,31 @@ All notable changes to Auto-Explorer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-02-16
+
+### Added
+- **Phase 3: Product & Strategy** in build mode — after engineering enhancements, Claude now evaluates product/UX improvements: friction reduction, better defaults, onboarding, competitive positioning, and delight moments
+- Auto-create `~/.claude/auto-explorer-limits.json` with sensible defaults on first use — eliminates silent no-guardrails first-run
+- First-use welcome message with quick tips when no session history exists
+- Richer session completion messages showing topic, mode, iterations, duration, file count, and next-step suggestions (for all end conditions: completed, rate-limited, max-iterations)
+- Expanded build mode auto-detection: 17 new English verbs (`improve`, `optimize`, `update`, `configure`, `install`, `redesign`, `integrate`, `automate`, `extract`, `remove`, `delete`, `replace`, `move`, `rename`, `split`, `merge`, `clean up`, `debug`, `patch`, `scaffold`, `generate`, `wire up`) and 18 new CJK verbs
+- `tests/test_mode_detection.py`: 9 test cases with 76 subtests covering all English and CJK patterns
+
+### Fixed
+- Stop hook `get_session_duration()` no longer re-parses state file — uses `started_at` from single frontmatter parse
+- Stop hook duration calculation now passes timestamp via `sys.argv` instead of bash string interpolation (prevents injection)
+- `count_output_files()` trims whitespace from `wc -l` output with `tr -d ' '`
+
+### Changed
+- Build mode Phase 2 renamed to "Engineering Enhancement" (was "Autonomous Enhancement") for clarity alongside new Phase 3
+- Session end messages now include structured summary with duration and file count instead of terse one-liners
+- Setup output simplified: removed implementation details (stop hook mechanism, config file paths), now shows only topic/mode/output/budget + action commands
+- Stop hook prompt now explicitly reminds Claude to update `_index.md` every iteration (prevents lost progress on unexpected stop)
+- Stop hook prompt uses `<descriptive-name>` instead of `<task-slug>` placeholder for clarity
+- Dashboard shows "Start one: /auto-explore <topic>" when no active session (call-to-action instead of dead end)
+- History entries now display output directory path so users can find results after session ends
+- Total test count: 39 → 48
+
 ## [1.1.0] - 2026-02-16
 
 ### Added

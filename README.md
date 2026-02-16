@@ -98,9 +98,10 @@ Auto-Explorer 會從你的主題用語自動偵測要用哪種模式（可用 `-
 | **Research** | Concepts, subjects, questions | Writes Markdown research reports 撰寫 Markdown 研究報告 |
 | **Build** | Action verbs (build, fix, implement...) | Writes working code, then autonomously enhances it 撰寫可運行的程式碼，然後自主增強 |
 
-**Build mode** has two phases / 建置模式有兩個階段:
+**Build mode** has three phases / 建置模式有三個階段:
 1. **Core Implementation** — Complete the requested task / 完成要求的任務
-2. **Autonomous Enhancement** — Review and improve until no more enhancements are worth the complexity / 檢視並改善，直到沒有更多值得增加複雜度的增強
+2. **Engineering Enhancement** — Fix bugs, improve robustness, add tests / 修復 bug、提升穩健性、新增測試
+3. **Product & Strategy** — Evaluate UX friction, onboarding, and competitive positioning / 評估使用者體驗摩擦、入門體驗與競爭定位
 
 ---
 
@@ -276,6 +277,7 @@ auto-explorer/
     test_check_rate_limits.py         # Rate limit tests / 速率限制測試
     test_history.py                   # History manager tests / 歷史管理器測試
     test_tag_extraction.py            # Tag extraction tests / 標籤提取測試
+    test_mode_detection.py            # Build/research mode detection tests / 模式偵測測試
   .gitignore                          # Git ignore rules / Git 忽略規則
   CHANGELOG.md                        # Version history / 版本歷史
   developer_guide.md                  # Developer guide / 開發者指南
@@ -307,8 +309,8 @@ Auto-Explorer 與 Ralph Loop 使用不同的狀態檔，資料互不干擾。但
 ### Running tests / 執行測試
 
 ```bash
-# Run all tests (39 tests)
-# 執行全部測試（39 個）
+# Run all tests (48 tests)
+# 執行全部測試（48 個）
 python -m pytest tests/ -v
 
 # Run a specific test file

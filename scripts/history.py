@@ -216,6 +216,7 @@ def cmd_show():
 
     else:
         print("  No active session.")
+        print("  Start one: /auto-explore <topic>")
 
     # Auto-fix stale "running" entries (session ended without proper history update)
     if fix_stale_sessions(history):
@@ -246,6 +247,7 @@ def cmd_show():
         reason = entry.get("reason", "")
         started = entry.get("started_at", "")
         ended = entry.get("ended_at", "")
+        output_dir = entry.get("output_dir", "")
         icon = status_icon(status)
         duration = format_duration(started, ended) if started else "?"
 
@@ -256,6 +258,8 @@ def cmd_show():
         lines = [f"  [{icon}] {time_part}  {duration:>6}  {mode:<8}  {iters:>3} iters  {topic}"]
         if reason and status != "running":
             lines.append(f"       >> {reason}")
+        if output_dir and status != "running":
+            lines.append(f"       >> {output_dir}/")
         return "\n".join(lines)
 
     if today_sessions:

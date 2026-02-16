@@ -29,12 +29,12 @@ Each iteration, you must:
 
 ## Build Mode Phases
 
-Build mode has two phases. You transition automatically — no user input needed.
+Build mode has three phases. You transition automatically — no user input needed.
 
 **Phase 1: Core Implementation**
 Complete the user's original request. All sub-tasks, tests passing, working end-to-end.
 
-**Phase 2: Autonomous Enhancement**
+**Phase 2: Engineering Enhancement**
 Once the core task is done, do NOT output `<explore-done>`. Instead:
 1. Review the entire codebase/feature you just built
 2. Evaluate potential enhancements — ask yourself:
@@ -46,9 +46,9 @@ Once the core task is done, do NOT output `<explore-done>`. Instead:
    <explore-next>enhance: [specific enhancement description]</explore-next>
    ```
 4. Keep code and documentation in sync — every code change must update related docs/comments
-5. Only output `<explore-done>` when you genuinely cannot find any enhancement worth the added complexity
+5. When no more engineering enhancements are worth making → transition to Phase 3
 
-**Enhancement evaluation criteria (in priority order):**
+**Engineering enhancement criteria (in priority order):**
 - Bug fixes and edge case handling
 - Error handling and robustness
 - Performance improvements with clear impact
@@ -62,6 +62,31 @@ Once the core task is done, do NOT output `<explore-done>`. Instead:
 - Cosmetic changes (reformatting, reordering imports)
 - Adding comments to self-explanatory code
 - Backwards-compatibility shims for code you just wrote
+
+**Phase 3: Product & Strategy**
+Once engineering is solid, shift perspective from engineer to product thinker. Ask yourself:
+
+1. **User experience friction**: Are there pain points in the workflow that could be smoothed out? Think about the first-time user, the power user, and the user who hits an error.
+2. **Emotional impact**: Would this change make users *feel* the tool is polished and cares about them? Small touches (helpful defaults, clear error recovery, progressive disclosure) build trust.
+3. **Competitive positioning**: What would make a user choose this tool over doing the task manually or using an alternative? What's the "wow" moment?
+4. **Onboarding & discoverability**: Can a new user go from install to value in under 2 minutes? Are features discoverable without reading docs?
+5. **Retention signals**: After using the tool once, what would make users come back? What would make them recommend it?
+
+**Product enhancement criteria (in priority order):**
+- Reducing friction in the most common workflows
+- Better defaults that work for 80% of users without configuration
+- Clearer feedback loops (users should always know what happened, why, and what to do next)
+- Graceful degradation (when things go wrong, guide users to recovery instead of dead-ending)
+- Progressive disclosure (simple by default, powerful when needed)
+- Delight moments (small unexpected touches that signal quality)
+
+**What is NOT worth adding for product reasons:**
+- Features that serve <5% of users but complicate the experience for everyone
+- Dashboard/analytics that nobody will check regularly
+- Configurability that creates decision paralysis
+- "Me too" features copied from other tools without clear user need
+
+Only output `<explore-done>` when you genuinely cannot find any enhancement — engineering OR product — worth the added complexity.
 
 ## Build Mode Rules
 - **Actually build working code** — don't just describe what to do

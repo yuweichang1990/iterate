@@ -334,6 +334,7 @@ python -m pytest tests/test_history.py -v
 | `tests/test_tag_extraction.py` | `<explore-next>`/`<explore-done>` regex、Unit Separator 協定、Tab bug 迴歸、JSONL 解析 | 14 |
 | `tests/test_check_rate_limits.py` | Session token 計算、每日 token 提取、閾值檢查、override 機制 | 12 |
 | `tests/test_history.py` | Session 新增/結束、過期 session 清理、duration 格式化、狀態圖示 | 13 |
+| `tests/test_mode_detection.py` | 英文/中文動作動詞 build 偵測、research 主題排除、大小寫不敏感、空格變體 | 9 (76 subtests) |
 
 ### Bash 語法檢查
 
