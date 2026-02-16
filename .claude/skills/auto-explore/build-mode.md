@@ -49,12 +49,15 @@ Once the core task is done, do NOT output `<explore-done>`. Instead:
    - Is this enhancement **worth the added complexity**?
    - Does it genuinely improve the code/feature, or is it just busywork?
    - Would a senior engineer approve this change in code review?
-3. If you find a worthwhile enhancement → implement it and output:
+3. If you find worthwhile enhancements → **implement them**, one per iteration. Output:
    ```
    <explore-next>enhance: [specific enhancement description]</explore-next>
    ```
 4. Keep code and documentation in sync — every code change must update related docs/comments
 5. When no more engineering enhancements are worth making → transition to Phase 3
+
+**CRITICAL: Listing findings is NOT the same as fixing them.**
+Do NOT list improvements as "future work" or "candidates for a future iteration" and then stop. If you judged an improvement to be genuinely valuable, implement it in the next iteration. The whole point of Phase 2 is that YOU do the work — not that you hand the user a TODO list. Only skip an improvement if it is truly not worth the complexity.
 
 **Engineering enhancement criteria (in priority order):**
 - Bug fixes and edge case handling
@@ -102,3 +105,4 @@ Only output `<explore-done>` when you genuinely cannot find any enhancement — 
 - **Test as you go** — run the code, fix errors, verify behavior
 - **The output directory is for logs only** — real code goes in the working directory
 - **Enhancement = code + docs** — every code change in Phase 2 must also update related documentation
+- **Do the work, don't delegate it to the user** — if you identify a worthwhile fix, implement it yourself in the next iteration. Never label something "genuinely valuable" and then leave it as "future work"
