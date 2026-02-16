@@ -31,6 +31,9 @@ HOOK_INPUT=$(cat)
 # Infinite loops are already prevented by: max_iterations, rate limits,
 # <explore-done> tag, and state file existence checks below.
 
+# Resolve script directory for helpers.py and history.py calls
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 # Check if auto-explorer is active
 STATE_FILE=".claude/auto-explorer.local.md"
 
@@ -39,25 +42,8 @@ if [[ ! -f "$STATE_FILE" ]]; then
   exit 0
 fi
 
-# Parse all frontmatter fields in a single Python call
-PARSED=$(python -c "
-import sys
-sep = sys.argv[2]
-content = open(sys.argv[1], 'r', encoding='utf-8').read()
-lines = content.split('\n')
-in_fm = False
-fields = {}
-for line in lines:
-    if line.strip() == '---':
-        if in_fm: break
-        in_fm = True
-        continue
-    if in_fm and ':' in line:
-        key, val = line.split(':', 1)
-        fields[key.strip()] = val.strip().strip('\"')
-keys = ['iteration','max_iterations','threshold','topic','topic_slug','output_dir','mode','started_at']
-print(sep.join(fields.get(k, '') for k in keys))
-" "$STATE_FILE" "$SEP" 2>/dev/null)
+# Parse all frontmatter fields via helpers.py
+PARSED=$(python "$SCRIPT_DIR/scripts/helpers.py" parse-frontmatter "$STATE_FILE" "$SEP" 2>/dev/null)
 
 if [[ -z "$PARSED" ]]; then
   echo "Auto-Explorer: Failed to parse state file" >&2
@@ -88,9 +74,6 @@ if [[ ! "$MAX_ITERATIONS" =~ ^[0-9]+$ ]]; then
   exit 0
 fi
 
-# Resolve script directory for history.py
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-
 # Count output files for summary messages (trim wc -l whitespace)
 count_output_files() {
   local dir="$1"
@@ -105,20 +88,7 @@ count_output_files() {
 get_session_duration() {
   local started_at="${1:-}"
   if [[ -n "$started_at" ]]; then
-    python -c "
-import sys
-from datetime import datetime, timezone
-try:
-    start = datetime.fromisoformat(sys.argv[1].replace('Z','+00:00'))
-    delta = datetime.now(timezone.utc) - start
-    mins = int(delta.total_seconds() // 60)
-    if mins >= 60:
-        print(f'{mins//60}h {mins%60}m')
-    else:
-        print(f'{mins}m')
-except Exception:
-    print('?')
-" "$started_at" 2>/dev/null || echo "?"
+    python "$SCRIPT_DIR/scripts/helpers.py" format-duration "$started_at" 2>/dev/null || echo "?"
   else
     echo "?"
   fi
@@ -143,11 +113,7 @@ if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $ITERATION -ge $MAX_ITERATIONS ]]; then
 fi
 
 # Get transcript path from hook input
-TRANSCRIPT_PATH=$(echo "$HOOK_INPUT" | python -c "
-import json, sys
-data = json.load(sys.stdin)
-print(data.get('transcript_path', ''))
-" 2>/dev/null)
+TRANSCRIPT_PATH=$(echo "$HOOK_INPUT" | python "$SCRIPT_DIR/scripts/helpers.py" extract-json-field transcript_path 2>/dev/null)
 
 HAVE_TRANSCRIPT=false
 if [[ -n "$TRANSCRIPT_PATH" ]] && [[ -f "$TRANSCRIPT_PATH" ]]; then
@@ -160,24 +126,8 @@ RATE_SUMMARY="transcript unavailable"
 if [[ "$HAVE_TRANSCRIPT" == true ]]; then
   RATE_CHECK=$(python "$SCRIPT_DIR/scripts/check-rate-limits.py" "$TRANSCRIPT_PATH" "$THRESHOLD" 2>/dev/null || echo '{"allowed":true}')
 
-  # Extract allowed, detail, and summary in a single Python call
-  RATE_PARSED=$(echo "$RATE_CHECK" | python -c "
-import sys, json
-sep = sys.argv[1]
-data = json.load(sys.stdin)
-allowed = 'yes' if data.get('allowed', True) else 'no'
-# Detail lines for exceeded limits
-detail_lines = []
-for d in data.get('details', []):
-    if d.get('exceeded'):
-        w, pct, used, limit, threshold = d['window'], d['pct'], d['used'], d['limit'], d['threshold']
-        detail_lines.append(f'  {w}: {used:,} / {limit:,} tokens ({pct}% >= {threshold*100:.0f}% threshold)')
-detail = '\n'.join(detail_lines)
-# Summary for system message
-parts = [f\"{d['window']}:{d['pct']}%\" for d in data.get('details', []) if 'window' in d and 'pct' in d]
-summary = ' | '.join(parts) if parts else 'no limits configured'
-print(f'{allowed}{sep}{detail}{sep}{summary}')
-" "$SEP" 2>/dev/null || echo "yes${SEP}${SEP}")
+  # Extract allowed, detail, and summary via helpers.py
+  RATE_PARSED=$(echo "$RATE_CHECK" | python "$SCRIPT_DIR/scripts/helpers.py" format-rate-summary "$SEP" 2>/dev/null || echo "yes${SEP}${SEP}")
 
   IFS="$SEP" read -r RATE_ALLOWED RATE_DETAIL RATE_SUMMARY <<< "$RATE_PARSED"
 
@@ -213,25 +163,7 @@ NEXT_SUBTOPIC=""
 
 if [[ "$HAVE_TRANSCRIPT" == true ]] && grep -q '"role":"assistant"' "$TRANSCRIPT_PATH" 2>/dev/null; then
   # Extract last assistant message text AND explore-done/explore-next tags
-  TAGS=$(grep '"role":"assistant"' "$TRANSCRIPT_PATH" | tail -1 | python -c "
-import json, re, sys
-sep = sys.argv[1]
-try:
-    line = sys.stdin.read().strip()
-    data = json.loads(line)
-    content = data.get('message', {}).get('content', [])
-    text = '\n'.join(item['text'] for item in content if item.get('type') == 'text')
-    done = next_t = ''
-    done_match = re.search(r'<explore-done>(.*?)</explore-done>', text, re.DOTALL)
-    if done_match:
-        done = re.sub(r'\s+', ' ', done_match.group(1).strip())
-    next_match = re.search(r'<explore-next>(.*?)</explore-next>', text, re.DOTALL)
-    if next_match:
-        next_t = re.sub(r'\s+', ' ', next_match.group(1).strip())
-    print(done + sep + next_t)
-except Exception:
-    print(sep)
-" "$SEP" 2>/dev/null || echo "$SEP")
+  TAGS=$(grep '"role":"assistant"' "$TRANSCRIPT_PATH" | tail -1 | python "$SCRIPT_DIR/scripts/helpers.py" extract-tags "$SEP" 2>/dev/null || echo "$SEP")
 
   IFS="$SEP" read -r EXPLORE_DONE NEXT_SUBTOPIC <<< "$TAGS"
 
@@ -316,14 +248,6 @@ fi
 SYSTEM_MSG="Auto-Explorer iteration $ITER_DISPLAY | Mode: ${MODE:-research} | Topic: $TOPIC | Sub-topic: $NEXT_SUBTOPIC | Usage: $RATE_SUMMARY"
 
 # Output JSON to block the stop and feed the next prompt
-python -c "
-import json, sys
-result = {
-    'decision': 'block',
-    'reason': sys.argv[1],
-    'systemMessage': sys.argv[2]
-}
-print(json.dumps(result))
-" "$NEXT_PROMPT" "$SYSTEM_MSG"
+python "$SCRIPT_DIR/scripts/helpers.py" json-output "$NEXT_PROMPT" "$SYSTEM_MSG"
 
 exit 0

@@ -8,23 +8,12 @@ that performs the extraction, including edge cases.
 """
 
 import json
-import re
 import unittest
 
+from conftest import import_script
 
-def extract_tags(text, sep="\x1f"):
-    """
-    Replicate the exact Python logic from stop-hook.sh for testing.
-    Returns (done, next_t) tuple.
-    """
-    done = next_t = ""
-    done_match = re.search(r"<explore-done>(.*?)</explore-done>", text, re.DOTALL)
-    if done_match:
-        done = re.sub(r"\s+", " ", done_match.group(1).strip())
-    next_match = re.search(r"<explore-next>(.*?)</explore-next>", text, re.DOTALL)
-    if next_match:
-        next_t = re.sub(r"\s+", " ", next_match.group(1).strip())
-    return done, next_t
+helpers = import_script("helpers.py")
+extract_tags = helpers.extract_tags
 
 
 def simulate_bash_read(output_str, sep="\x1f"):

@@ -335,6 +335,9 @@ python -m pytest tests/test_history.py -v
 | `tests/test_check_rate_limits.py` | Session token 計算、每日 token 提取、閾值檢查、override 機制 | 12 |
 | `tests/test_history.py` | Session 新增/結束、過期 session 清理、duration 格式化、狀態圖示 | 13 |
 | `tests/test_mode_detection.py` | 英文/中文動作動詞 build 偵測、research 主題排除、大小寫不敏感、空格變體 | 9 (76 subtests) |
+| `tests/test_helpers.py` | frontmatter 解析、slug 生成、過期偵測、主題建議、duration 格式化、rate summary | 27 |
+| `tests/test_bash_syntax.py` | `bash -n` 語法檢查（Windows 自動尋找 Git Bash，避免 WSL） | 2 |
+| `tests/test_version_consistency.py` | plugin.json、marketplace.json、CHANGELOG.md 版本一致性 | 4 |
 
 ### Bash 語法檢查
 
@@ -342,3 +345,5 @@ python -m pytest tests/test_history.py -v
 bash -n scripts/setup-auto-explorer.sh
 bash -n hooks/stop-hook.sh
 ```
+
+上述語法檢查也包含在 `test_bash_syntax.py` 中，CI 環境可直接用 pytest 執行。

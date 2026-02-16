@@ -2,28 +2,16 @@
 """
 Tests for the auto-detection of build vs research mode from topic wording.
 
-These patterns are embedded in setup-auto-explorer.sh's Python block.
-The test replicates the exact regex patterns to validate detection accuracy.
+The canonical implementation lives in scripts/helpers.py.
+Tests cover direct verbs, polite prefixes (EN + CJK), and research exclusions.
 """
 
-import re
 import unittest
 
+from conftest import import_script
 
-def detect_mode(topic):
-    """
-    Replicate the exact Python logic from setup-auto-explorer.sh for testing.
-    Returns 'build' or 'research'.
-    """
-    lower_topic = topic.lower().strip()
-    build_patterns = [
-        r'^(build|implement|create|develop|fix|refactor|add|make|write|set\s*up|deploy|migrate|convert|port|upgrade|improve|optimize|update|configure|install|redesign|integrate|automate|extract|remove|delete|replace|move|rename|split|merge|clean\s*up|debug|patch|scaffold|generate|wire\s*up)',
-        r'^(設計|建立|開發|實作|修復|重構|新增|部署|撰寫|建置|優化|更新|設定|安裝|改善|整合|自動化|提取|刪除|替換|移動|合併|清理|除錯|修補|產生|升級|進化)',
-    ]
-    for pat in build_patterns:
-        if re.search(pat, lower_topic):
-            return 'build'
-    return 'research'
+helpers = import_script("helpers.py")
+detect_mode = helpers.detect_mode
 
 
 class TestEnglishBuildPatterns(unittest.TestCase):
@@ -163,6 +151,67 @@ class TestCJKBuildPatterns(unittest.TestCase):
             "分散式共識演算法",
             "WebAssembly 效能分析",
             "React 渲染機制",
+        ]
+        for topic in topics:
+            with self.subTest(topic=topic):
+                self.assertEqual(detect_mode(topic), "research", f"Failed for: {topic}")
+
+
+class TestPolitePrefix(unittest.TestCase):
+    """Test that polite prefixes are stripped before matching (v1.3.0).
+
+    Users naturally write "please build X" or "請進化此 project" — the polite
+    prefix should not prevent build mode detection.
+    """
+
+    def test_english_polite_build(self):
+        """English polite prefixes + action verbs → build."""
+        topics = [
+            "please build a REST API",
+            "can you fix the login bug",
+            "could you refactor the database",
+            "i want to create a dashboard",
+            "i need to deploy to AWS",
+            "i'd like to improve error handling",
+            "let's implement authentication",
+            "help me add unit tests",
+        ]
+        for topic in topics:
+            with self.subTest(topic=topic):
+                self.assertEqual(detect_mode(topic), "build", f"Failed for: {topic}")
+
+    def test_english_polite_research(self):
+        """English polite prefixes + non-action topics → research."""
+        topics = [
+            "please research quantum computing",
+            "can you explain how React works",
+            "could you describe distributed systems",
+            "help me understand WebAssembly",
+        ]
+        for topic in topics:
+            with self.subTest(topic=topic):
+                self.assertEqual(detect_mode(topic), "research", f"Failed for: {topic}")
+
+    def test_cjk_polite_build(self):
+        """CJK polite prefixes + action verbs → build."""
+        topics = [
+            "請進化此 project",
+            "請自我進化此 project",
+            "幫我建立一個 REST API",
+            "協助我修復登入問題",
+            "請幫忙優化查詢效能",
+            "請協助我重構資料庫層",
+            "自我進化此 project",
+        ]
+        for topic in topics:
+            with self.subTest(topic=topic):
+                self.assertEqual(detect_mode(topic), "build", f"Failed for: {topic}")
+
+    def test_cjk_polite_research(self):
+        """CJK polite prefixes + non-action topics → research."""
+        topics = [
+            "請研究量子計算",
+            "幫我了解 WebAssembly",
         ]
         for topic in topics:
             with self.subTest(topic=topic):

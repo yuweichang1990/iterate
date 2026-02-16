@@ -5,6 +5,28 @@ All notable changes to Auto-Explorer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-02-16
+
+### Added
+- `LICENSE` file (MIT) for open-source discoverability and trust
+- Stale session detection: sessions >24h old are auto-cleaned instead of permanently blocking new sessions
+- `scripts/helpers.py`: shared utility module extracted from inline Python in bash scripts — single source of truth for frontmatter parsing, slug generation, mode detection, tag extraction, stale detection, topic suggestion, duration formatting, and rate summary formatting
+- `tests/test_helpers.py`: 27 tests covering all helpers.py functions (frontmatter, slug, stale, suggestion, duration, rate summary)
+- `tests/test_bash_syntax.py`: validates both `.sh` scripts pass `bash -n` syntax check (Windows-aware: finds Git Bash explicitly to avoid WSL)
+- `tests/test_version_consistency.py`: validates version numbers are consistent across `plugin.json`, `marketplace.json`, and `CHANGELOG.md`
+- `tests/conftest.py`: shared test configuration with `import_script()` helper for importing hyphenated script filenames
+- Polite prefix stripping for mode detection: "please build", "can you fix", "請進化", "請自我進化", "幫我建立" etc. now correctly detect build mode (8 English + 11 CJK prefixes)
+- `.github/workflows/test.yml`: CI/CD with GitHub Actions — runs on push/PR, tests on Python 3.9 + 3.12 (ubuntu) and 3.12 (windows)
+
+### Fixed
+- **Critical**: `stop-hook.sh` used `$SCRIPT_DIR` before it was defined (regression from helpers.py extraction) — moved `SCRIPT_DIR` definition before first `helpers.py` call
+
+### Changed
+- `stop-hook.sh`: all 6 inline Python blocks replaced with `helpers.py` calls (frontmatter parsing, duration formatting, JSON field extraction, rate summary, tag extraction, JSON output)
+- `setup-auto-explorer.sh`: all 5 inline Python blocks replaced with `helpers.py` calls (topic suggestion, stale check, stale info, slug+mode detection); 4 separate Python calls for stale session info consolidated into 1
+- `test_tag_extraction.py` and `test_mode_detection.py` now import from `helpers.py` instead of duplicating logic
+- Total test count: 48 → 85
+
 ## [1.2.0] - 2026-02-16
 
 ### Added

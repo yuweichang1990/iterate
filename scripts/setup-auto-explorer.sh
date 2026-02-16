@@ -16,6 +16,9 @@ fi
 # Non-whitespace delimiter for Python→bash data passing (see developer_guide.md Problem 4)
 SEP=$'\x1f'
 
+# Resolve script directory early (used for helpers.py calls throughout)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Parse arguments
 TOPIC_PARTS=()
 MAX_ITERATIONS=0
@@ -133,21 +136,7 @@ if [[ -z "$TOPIC" ]]; then
   INTERESTS_FILE="$HOME/.claude/user-interests.md"
   if [[ -f "$INTERESTS_FILE" ]]; then
     # Extract first numbered suggestion from Suggested Next Directions
-    TOPIC=$(python -c "
-import re, sys
-with open(sys.argv[1], 'r', encoding='utf-8') as f:
-    content = f.read()
-in_section = False
-for line in content.split('\n'):
-    if 'Suggested Next Directions' in line:
-        in_section = True
-        continue
-    if in_section and re.match(r'^\d+\.', line.strip()):
-        suggestion = re.sub(r'^\d+\.\s*', '', line.strip())
-        if suggestion and 'No suggestions yet' not in suggestion:
-            print(suggestion)
-            break
-" "$INTERESTS_FILE" 2>/dev/null || echo "")
+    TOPIC=$(python "$SCRIPT_DIR/helpers.py" suggest-topic "$INTERESTS_FILE" 2>/dev/null || echo "")
   fi
 
   if [[ -z "$TOPIC" ]]; then
@@ -192,38 +181,30 @@ if [[ -f ".claude/ralph-loop.local.md" ]]; then
   exit 1
 fi
 
-# Check for existing auto-explorer session
+# Check for existing auto-explorer session (with stale detection)
 if [[ -f ".claude/auto-explorer.local.md" ]]; then
-  echo "Warning: An auto-explorer session is already active!" >&2
-  echo "   Use /cancel-explore to stop it first, then try again." >&2
-  exit 1
+  # Check if the session is stale (>24h old) — auto-cleanup instead of blocking
+  IS_STALE=$(python "$SCRIPT_DIR/helpers.py" check-stale ".claude/auto-explorer.local.md" 2>/dev/null || echo "no")
+
+  if [[ "$IS_STALE" == "yes" ]]; then
+    # Auto-cleanup stale session — get topic, slug, iteration in one call
+    STALE_INFO=$(python "$SCRIPT_DIR/helpers.py" stale-info ".claude/auto-explorer.local.md" "$SEP" 2>/dev/null || echo "unknown${SEP}unknown${SEP}0")
+    IFS="$SEP" read -r STALE_TOPIC STALE_SLUG STALE_ITER <<< "$STALE_INFO"
+    echo "Auto-cleanup: Previous session on '$STALE_TOPIC' is >24h old."
+    echo "   Cleaning up stale state file and proceeding with new session."
+    echo ""
+    # Record stale session in history before removing
+    python "$SCRIPT_DIR/history.py" end "$STALE_SLUG" "$STALE_ITER" "error" "Stale session auto-cleaned (>24h)" 2>/dev/null || true
+    rm -f ".claude/auto-explorer.local.md"
+  else
+    echo "Warning: An auto-explorer session is already active!" >&2
+    echo "   Use /cancel-explore to stop it first, then try again." >&2
+    exit 1
+  fi
 fi
 
-# Create slug and auto-detect mode in a single Python call
-SLUG_AND_MODE=$(python -c "
-import re, sys, unicodedata, hashlib
-topic = sys.argv[1]
-# --- Slug ---
-normalized = unicodedata.normalize('NFKD', topic).encode('ascii', 'ignore').decode('ascii')
-slug = re.sub(r'[^a-z0-9]+', '-', normalized.lower().strip()).strip('-')
-if not slug:
-    slug = 'topic-' + hashlib.md5(topic.encode('utf-8')).hexdigest()[:8]
-if len(slug) > 50:
-    slug = slug[:50].rstrip('-')
-# --- Mode ---
-mode = 'research'
-lower_topic = topic.lower().strip()
-build_patterns = [
-    r'^(build|implement|create|develop|fix|refactor|add|make|write|set\s*up|deploy|migrate|convert|port|upgrade|improve|optimize|update|configure|install|redesign|integrate|automate|extract|remove|delete|replace|move|rename|split|merge|clean\s*up|debug|patch|scaffold|generate|wire\s*up)',
-    r'^(設計|建立|開發|實作|修復|重構|新增|部署|撰寫|建置|優化|更新|設定|安裝|改善|整合|自動化|提取|刪除|替換|移動|合併|清理|除錯|修補|產生|升級|進化)',
-]
-for pat in build_patterns:
-    if re.search(pat, lower_topic):
-        mode = 'build'
-        break
-sep = sys.argv[2]
-print(slug + sep + mode)
-" "$TOPIC" "$SEP")
+# Create slug and auto-detect mode via helpers.py
+SLUG_AND_MODE=$(python "$SCRIPT_DIR/helpers.py" make-slug-and-mode "$TOPIC" "$SEP")
 
 IFS="$SEP" read -r TOPIC_SLUG MODE <<< "$SLUG_AND_MODE"
 
@@ -279,7 +260,6 @@ $STATE_BODY
 EOF
 
 # Record session in history log
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Detect first-ever session for welcome message
 HISTORY_FILE="auto-explore-findings/.history.json"

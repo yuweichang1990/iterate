@@ -273,11 +273,17 @@ auto-explorer/
     setup-auto-explorer.sh            # Initialization / 初始化腳本
     check-rate-limits.py              # Rate limit checker / 速率限制檢查
     history.py                        # Session history manager / 歷史管理器
+    helpers.py                        # Shared utilities (frontmatter, slug, tags) / 共用工具
   tests/
     test_check_rate_limits.py         # Rate limit tests / 速率限制測試
     test_history.py                   # History manager tests / 歷史管理器測試
     test_tag_extraction.py            # Tag extraction tests / 標籤提取測試
     test_mode_detection.py            # Build/research mode detection tests / 模式偵測測試
+    test_helpers.py                   # Shared helpers tests / 共用工具測試
+    test_bash_syntax.py               # Bash script syntax validation / Bash 腳本語法驗證
+    test_version_consistency.py       # Version consistency checks / 版本一致性檢查
+    conftest.py                       # Shared test config / 共用測試設定
+  LICENSE                             # MIT License / MIT 授權
   .gitignore                          # Git ignore rules / Git 忽略規則
   CHANGELOG.md                        # Version history / 版本歷史
   developer_guide.md                  # Developer guide / 開發者指南
@@ -309,8 +315,8 @@ Auto-Explorer 與 Ralph Loop 使用不同的狀態檔，資料互不干擾。但
 ### Running tests / 執行測試
 
 ```bash
-# Run all tests (48 tests)
-# 執行全部測試（48 個）
+# Run all tests (85 tests)
+# 執行全部測試（85 個）
 python -m pytest tests/ -v
 
 # Run a specific test file
