@@ -28,6 +28,7 @@ Start an autonomous exploration session.
   - `conservative` = stop at 40% account usage
   - `moderate` = stop at 60% account usage (default)
   - `aggressive` = stop at 80% account usage
+- `--mode research|build` — Force mode instead of auto-detecting from topic wording
 - `--max-iterations N` — Optional hard cap on iterations (default: unlimited)
 
 **Examples:**
@@ -36,6 +37,7 @@ Start an autonomous exploration session.
 /auto-explore --budget conservative WebAssembly
 /auto-explore --budget aggressive distributed consensus algorithms
 /auto-explore --max-iterations 30 Go generics
+/auto-explore --mode research build system internals
 /auto-explore
 ```
 

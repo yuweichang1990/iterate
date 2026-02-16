@@ -7,6 +7,12 @@
 
 set -euo pipefail
 
+# Quick Python check — stop hook must not crash, so just allow exit on failure
+if ! python -c "import sys; sys.exit(0 if sys.version_info >= (3, 6) else 1)" 2>/dev/null; then
+  echo "Auto-Explorer: Python 3.6+ not found — stopping exploration." >&2
+  exit 0
+fi
+
 # Delimiter for Python→bash data passing.
 # IMPORTANT: Must NOT be a whitespace character (tab, space).
 # Bash `read` strips leading whitespace IFS chars, which silently
@@ -56,7 +62,7 @@ print(sep.join(fields.get(k, '') for k in keys))
 if [[ -z "$PARSED" ]]; then
   echo "Auto-Explorer: Failed to parse state file" >&2
   echo "   Stopping exploration. Use /auto-explore to start fresh." >&2
-  rm "$STATE_FILE"
+  rm -f "$STATE_FILE"
   exit 0
 fi
 
@@ -71,14 +77,14 @@ if [[ -z "$MODE" ]]; then MODE="research"; fi
 if [[ ! "$ITERATION" =~ ^[0-9]+$ ]]; then
   echo "Auto-Explorer: State file corrupted (iteration: '$ITERATION')" >&2
   echo "   Stopping exploration. Use /auto-explore to start fresh." >&2
-  rm "$STATE_FILE"
+  rm -f "$STATE_FILE"
   exit 0
 fi
 
 if [[ ! "$MAX_ITERATIONS" =~ ^[0-9]+$ ]]; then
   echo "Auto-Explorer: State file corrupted (max_iterations: '$MAX_ITERATIONS')" >&2
   echo "   Stopping exploration. Use /auto-explore to start fresh." >&2
-  rm "$STATE_FILE"
+  rm -f "$STATE_FILE"
   exit 0
 fi
 
@@ -90,7 +96,7 @@ if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $ITERATION -ge $MAX_ITERATIONS ]]; then
   python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "max-iterations" "Completed all $MAX_ITERATIONS iterations" 2>/dev/null || true
   echo "Auto-Explorer: Completed all $MAX_ITERATIONS iterations on '$TOPIC'."
   echo "   Findings are in: $OUTPUT_DIR/"
-  rm "$STATE_FILE"
+  rm -f "$STATE_FILE"
   exit 0
 fi
 
@@ -101,19 +107,19 @@ data = json.load(sys.stdin)
 print(data.get('transcript_path', ''))
 " 2>/dev/null)
 
-if [[ -z "$TRANSCRIPT_PATH" ]] || [[ ! -f "$TRANSCRIPT_PATH" ]]; then
-  echo "Auto-Explorer: Transcript file not found" >&2
-  echo "   Expected: $TRANSCRIPT_PATH" >&2
-  echo "   Stopping exploration." >&2
-  rm "$STATE_FILE"
-  exit 0
+HAVE_TRANSCRIPT=false
+if [[ -n "$TRANSCRIPT_PATH" ]] && [[ -f "$TRANSCRIPT_PATH" ]]; then
+  HAVE_TRANSCRIPT=true
 fi
 
 # --- Rate limit check (primary stopping mechanism) ---
-RATE_CHECK=$(python "$SCRIPT_DIR/scripts/check-rate-limits.py" "$TRANSCRIPT_PATH" "$THRESHOLD" 2>/dev/null || echo '{"allowed":true}')
+# Skip rate check if transcript unavailable (allow this iteration, check next time)
+RATE_SUMMARY="transcript unavailable"
+if [[ "$HAVE_TRANSCRIPT" == true ]]; then
+  RATE_CHECK=$(python "$SCRIPT_DIR/scripts/check-rate-limits.py" "$TRANSCRIPT_PATH" "$THRESHOLD" 2>/dev/null || echo '{"allowed":true}')
 
-# Extract allowed, detail, and summary in a single Python call
-RATE_PARSED=$(echo "$RATE_CHECK" | python -c "
+  # Extract allowed, detail, and summary in a single Python call
+  RATE_PARSED=$(echo "$RATE_CHECK" | python -c "
 import sys, json
 sep = sys.argv[1]
 data = json.load(sys.stdin)
@@ -131,31 +137,31 @@ summary = ' | '.join(parts) if parts else 'no limits configured'
 print(f'{allowed}{sep}{detail}{sep}{summary}')
 " "$SEP" 2>/dev/null || echo "yes${SEP}${SEP}")
 
-IFS="$SEP" read -r RATE_ALLOWED RATE_DETAIL RATE_SUMMARY <<< "$RATE_PARSED"
+  IFS="$SEP" read -r RATE_ALLOWED RATE_DETAIL RATE_SUMMARY <<< "$RATE_PARSED"
 
-if [[ "$RATE_ALLOWED" == "no" ]]; then
-  python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "rate-limited" "Rate limit threshold reached" 2>/dev/null || true
-  echo "Auto-Explorer: Rate limit reached — stopping exploration."
-  echo "   Topic: $TOPIC (completed $ITERATION iterations)"
-  echo "   Exceeded limits:"
-  echo "$RATE_DETAIL"
-  echo ""
-  echo "   Findings so far are in: $OUTPUT_DIR/"
-  echo "   Edit ~/.claude/auto-explorer-limits.json to adjust limits."
-  rm "$STATE_FILE"
-  exit 0
+  if [[ "$RATE_ALLOWED" == "no" ]]; then
+    python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "rate-limited" "Rate limit threshold reached" 2>/dev/null || true
+    echo "Auto-Explorer: Rate limit reached — stopping exploration."
+    echo "   Topic: $TOPIC (completed $ITERATION iterations)"
+    echo "   Exceeded limits:"
+    echo "$RATE_DETAIL"
+    echo ""
+    echo "   Findings so far are in: $OUTPUT_DIR/"
+    echo "   Edit ~/.claude/auto-explorer-limits.json to adjust limits."
+    rm -f "$STATE_FILE"
+    exit 0
+  fi
 fi
 
-# Check for assistant messages in transcript
-if ! grep -q '"role":"assistant"' "$TRANSCRIPT_PATH" 2>/dev/null; then
-  echo "Auto-Explorer: No assistant messages found in transcript" >&2
-  echo "   Stopping exploration." >&2
-  rm "$STATE_FILE"
-  exit 0
-fi
+# --- Tag extraction ---
+# Extract explore-done/explore-next from last assistant message.
+# If transcript is unavailable, skip tag extraction and use fallback prompt.
+EXPLORE_DONE=""
+NEXT_SUBTOPIC=""
 
-# Extract last assistant message text AND explore-done/explore-next tags
-TAGS=$(grep '"role":"assistant"' "$TRANSCRIPT_PATH" | tail -1 | python -c "
+if [[ "$HAVE_TRANSCRIPT" == true ]] && grep -q '"role":"assistant"' "$TRANSCRIPT_PATH" 2>/dev/null; then
+  # Extract last assistant message text AND explore-done/explore-next tags
+  TAGS=$(grep '"role":"assistant"' "$TRANSCRIPT_PATH" | tail -1 | python -c "
 import json, re, sys
 sep = sys.argv[1]
 try:
@@ -175,16 +181,17 @@ except Exception:
     print(sep)
 " "$SEP" 2>/dev/null || echo "$SEP")
 
-IFS="$SEP" read -r EXPLORE_DONE NEXT_SUBTOPIC <<< "$TAGS"
+  IFS="$SEP" read -r EXPLORE_DONE NEXT_SUBTOPIC <<< "$TAGS"
 
-if [[ -n "$EXPLORE_DONE" ]]; then
-  python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "completed" "$EXPLORE_DONE" 2>/dev/null || true
-  echo "Auto-Explorer: Task completed!"
-  echo "   Topic: $TOPIC (completed in $ITERATION iterations)"
-  echo "   Reason: $EXPLORE_DONE"
-  echo "   Output: $OUTPUT_DIR/"
-  rm "$STATE_FILE"
-  exit 0
+  if [[ -n "$EXPLORE_DONE" ]]; then
+    python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "completed" "$EXPLORE_DONE" 2>/dev/null || true
+    echo "Auto-Explorer: Task completed!"
+    echo "   Topic: $TOPIC (completed in $ITERATION iterations)"
+    echo "   Reason: $EXPLORE_DONE"
+    echo "   Output: $OUTPUT_DIR/"
+    rm -f "$STATE_FILE"
+    exit 0
+  fi
 fi
 
 # Fallback if no <explore-next> tag found (mode-aware)
@@ -238,8 +245,12 @@ fi
 
 # Update iteration in state file (atomic update via temp file)
 TEMP_FILE="${STATE_FILE}.tmp.$$"
-sed "s/^iteration: .*/iteration: $NEXT_ITERATION/" "$STATE_FILE" > "$TEMP_FILE"
-mv "$TEMP_FILE" "$STATE_FILE"
+if sed "s/^iteration: .*/iteration: $NEXT_ITERATION/" "$STATE_FILE" > "$TEMP_FILE" 2>/dev/null; then
+  mv "$TEMP_FILE" "$STATE_FILE"
+else
+  # sed failed — clean up temp file and continue with stale iteration count
+  rm -f "$TEMP_FILE"
+fi
 
 # Build system message
 SYSTEM_MSG="Auto-Explorer iteration $ITER_DISPLAY | Mode: ${MODE:-research} | Topic: $TOPIC | Sub-topic: $NEXT_SUBTOPIC | Usage: $RATE_SUMMARY"

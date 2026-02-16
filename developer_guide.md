@@ -291,3 +291,53 @@ fi
 | **Python→Bash 的資料傳遞要用 non-whitespace 分隔符** | 或改用 JSON + `jq`/`python` 逐欄位提取 |
 | **必須檢查 `stop_hook_active`** | 否則 stop hook 會在每次 iteration 都嘗試 block，造成無限循環 |
 | **測試 stop hook 時要覆蓋「空欄位」情境** | `<explore-next>` 有值但 `<explore-done>` 為空 = 第一個欄位為空 = 最容易觸發此 bug |
+| **Stop hook 不應因 transcript 缺失而終止 session** | Transcript 可能暫時不可用，應以 fallback prompt 繼續迴圈，下次再檢查 rate limit |
+| **用 `rm -f` 而非 `rm`** | 避免併發刪除或檔案已不存在時出錯 |
+
+---
+
+## `--mode` 強制模式旗標
+
+### 用法
+
+```bash
+/auto-explore --mode build Rust async patterns
+/auto-explore --mode research build system internals
+```
+
+自動偵測有時會判斷錯誤（例如主題含有「build」但其實是研究目的）。`--mode` 旗標讓使用者直接覆蓋。
+
+實作位於 `setup-auto-explorer.sh`：
+- 解析 `--mode` 參數，驗證值為 `research` 或 `build`
+- 在 Python 自動偵測之後套用覆蓋
+
+---
+
+## 測試 / Testing
+
+### 執行測試
+
+```bash
+# 在專案根目錄執行所有測試
+python -m pytest tests/ -v
+
+# 執行特定測試檔
+python -m pytest tests/test_tag_extraction.py -v
+python -m pytest tests/test_check_rate_limits.py -v
+python -m pytest tests/test_history.py -v
+```
+
+### 測試結構
+
+| 檔案 | 涵蓋範圍 | 測試數 |
+|------|----------|--------|
+| `tests/test_tag_extraction.py` | `<explore-next>`/`<explore-done>` regex、Unit Separator 協定、Tab bug 迴歸、JSONL 解析 | 14 |
+| `tests/test_check_rate_limits.py` | Session token 計算、每日 token 提取、閾值檢查、override 機制 | 12 |
+| `tests/test_history.py` | Session 新增/結束、過期 session 清理、duration 格式化、狀態圖示 | 13 |
+
+### Bash 語法檢查
+
+```bash
+bash -n scripts/setup-auto-explorer.sh
+bash -n hooks/stop-hook.sh
+```

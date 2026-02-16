@@ -6,11 +6,22 @@
 
 set -euo pipefail
 
+# Verify Python 3.6+ is available (required for f-strings, datetime.timezone)
+if ! python -c "import sys; assert sys.version_info >= (3, 6), f'Python 3.6+ required, got {sys.version}'" 2>/dev/null; then
+  echo "Error: Python 3.6+ is required but not found in PATH." >&2
+  echo "   Install Python 3 or ensure it is in your PATH." >&2
+  exit 1
+fi
+
+# Non-whitespace delimiter for Python→bash data passing (see developer_guide.md Problem 4)
+SEP=$'\x1f'
+
 # Parse arguments
 TOPIC_PARTS=()
 MAX_ITERATIONS=0
 BUDGET=""
 THRESHOLD=""
+FORCE_MODE=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -30,6 +41,7 @@ OPTIONS:
                             conservative = stop at 40% usage
                             moderate     = stop at 60% usage (default)
                             aggressive   = stop at 80% usage
+  --mode <mode>           Force mode: research or build (default: auto-detect)
   --max-iterations <n>    Optional hard cap on iterations (default: unlimited)
   -h, --help              Show this help message
 
@@ -80,6 +92,18 @@ HELP_EOF
         exit 1
       fi
       BUDGET="$2"
+      shift 2
+      ;;
+    --mode)
+      if [[ -z "${2:-}" ]]; then
+        echo "Error: --mode requires a value (research or build)" >&2
+        exit 1
+      fi
+      if [[ "$2" != "research" && "$2" != "build" ]]; then
+        echo "Error: --mode must be 'research' or 'build', got: $2" >&2
+        exit 1
+      fi
+      FORCE_MODE="$2"
       shift 2
       ;;
     *)
@@ -178,10 +202,16 @@ for pat in build_patterns:
     if re.search(pat, lower_topic):
         mode = 'build'
         break
-print(slug + '\t' + mode)
-" "$TOPIC")
+sep = sys.argv[2]
+print(slug + sep + mode)
+" "$TOPIC" "$SEP")
 
-IFS=$'\t' read -r TOPIC_SLUG MODE <<< "$SLUG_AND_MODE"
+IFS="$SEP" read -r TOPIC_SLUG MODE <<< "$SLUG_AND_MODE"
+
+# Override mode if --mode flag was used
+if [[ -n "$FORCE_MODE" ]]; then
+  MODE="$FORCE_MODE"
+fi
 
 # Create output directory
 OUTPUT_DIR="auto-explore-findings/$TOPIC_SLUG"

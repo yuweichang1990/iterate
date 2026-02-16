@@ -10,6 +10,7 @@ Subcommands:
   show
 """
 
+import importlib.util
 import json
 import sys
 from datetime import datetime, timezone
@@ -34,12 +35,36 @@ def save_history(history):
         json.dump(history, f, indent=2, ensure_ascii=False)
 
 
+def fix_stale_sessions(history):
+    """Mark any 'running' sessions as 'error' if no state file exists.
+
+    This handles cases where a session crashed without proper cleanup.
+    Called from both cmd_add (at startup) and cmd_show (on dashboard).
+    """
+    state_file = Path(".claude/auto-explorer.local.md")
+    if state_file.exists():
+        return False  # There's an active session, don't touch running entries
+    dirty = False
+    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    for entry in history:
+        if entry.get("status") == "running":
+            entry["status"] = "error"
+            entry["reason"] = "Session ended unexpectedly"
+            entry["ended_at"] = now_str
+            dirty = True
+    return dirty
+
+
 def cmd_add(args):
     """Add a new session record."""
     if len(args) < 7:
         print("Usage: history.py add <topic> <mode> <slug> <budget> <threshold> <started_at> <output_dir>", file=sys.stderr)
         sys.exit(1)
     history = load_history()
+    # Fix any stale sessions from previous crashes before adding new one
+    if fix_stale_sessions(history):
+        save_history(history)
+        history = load_history()  # Re-read after fix
     history.append({
         "topic": args[0],
         "mode": args[1],
@@ -158,21 +183,43 @@ def cmd_show():
         print(f"     Running:   {duration}")
         print(f"     Threshold: {float(threshold)*100:.0f}%")
         print(f"     Started:   {started}")
+
+        # Show rate limit usage if check-rate-limits.py is available
+        try:
+            script_dir = Path(__file__).parent
+            spec = importlib.util.spec_from_file_location(
+                "check_rate_limits", str(script_dir / "check-rate-limits.py")
+            )
+            crl = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(crl)
+            result = crl.check_limits(threshold_override=float(threshold))
+            details = result.get("details", [])
+            usage_parts = []
+            for d in details:
+                if "window" in d and "pct" in d:
+                    pct = d["pct"]
+                    window = d["window"]
+                    limit = d.get("limit", 0)
+                    used = d.get("used", 0)
+                    bar_len = 20
+                    filled = min(int(pct / 100 * bar_len), bar_len)
+                    bar = "#" * filled + "-" * (bar_len - filled)
+                    exceeded = d.get("exceeded", False)
+                    marker = " EXCEEDED" if exceeded else ""
+                    usage_parts.append(f"     {window:>6}: [{bar}] {pct:5.1f}%  ({used:,} / {limit:,}){marker}")
+            if usage_parts:
+                print(f"     --- Rate Limits ---")
+                for line in usage_parts:
+                    print(line)
+        except Exception:
+            pass  # Don't crash dashboard if rate limit check fails
+
     else:
         print("  No active session.")
 
     # Auto-fix stale "running" entries (session ended without proper history update)
-    if not active:
-        dirty = False
-        now_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-        for entry in history:
-            if entry.get("status") == "running":
-                entry["status"] = "error"
-                entry["reason"] = "Session ended unexpectedly"
-                entry["ended_at"] = now_str
-                dirty = True
-        if dirty:
-            save_history(history)
+    if fix_stale_sessions(history):
+        save_history(history)
 
     # Session history
     if not history:

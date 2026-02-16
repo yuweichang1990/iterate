@@ -1,6 +1,6 @@
 ---
 description: "Start Auto-Explorer in current session"
-argument-hint: "[TOPIC] [--budget conservative|moderate|aggressive] [--max-iterations N]"
+argument-hint: "[TOPIC] [--budget conservative|moderate|aggressive] [--mode research|build] [--max-iterations N]"
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-auto-explorer.sh:*)"
   - "Read"

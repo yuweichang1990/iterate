@@ -1,0 +1,23 @@
+# Auto-Explorer runtime artifacts
+auto-explore-findings/
+.claude/auto-explorer.local.md
+*.tmp.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+
+# Orphan marker (plugin system artifact)
+.orphaned_at

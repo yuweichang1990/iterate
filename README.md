@@ -56,6 +56,11 @@ That's it. Claude will research the topic across multiple rounds, writing struct
 # 建置模式 — 從動作動詞自動偵測
 /auto-explore build a REST API with authentication
 
+# Force a specific mode (overrides auto-detection)
+# 強制指定模式（覆蓋自動偵測）
+/auto-explore --mode research build system internals
+/auto-explore --mode build improve error handling
+
 # Control how much quota to use
 # 控制使用多少額度
 /auto-explore --budget conservative WebAssembly
@@ -85,8 +90,8 @@ That's it. Claude will research the topic across multiple rounds, writing struct
 
 ## Two Modes / 雙模式
 
-Auto-Explorer auto-detects which mode to use from your topic wording:
-Auto-Explorer 會從你的主題用語自動偵測要用哪種模式：
+Auto-Explorer auto-detects which mode to use from your topic wording (override with `--mode`):
+Auto-Explorer 會從你的主題用語自動偵測要用哪種模式（可用 `--mode` 覆蓋）：
 
 | Mode / 模式 | When / 何時 | What happens / 行為 |
 |------|---------|----------|
@@ -261,11 +266,19 @@ auto-explorer/
     explore-help/SKILL.md             # /explore-help / 說明技能
   hooks/
     hooks.json                        # Stop hook config / 停止鉤子設定
+    stop-hook-entry.js                # Windows-compatible entry point / Windows 相容入口
     stop-hook.sh                      # Core engine / 核心引擎
   scripts/
     setup-auto-explorer.sh            # Initialization / 初始化腳本
     check-rate-limits.py              # Rate limit checker / 速率限制檢查
     history.py                        # Session history manager / 歷史管理器
+  tests/
+    test_check_rate_limits.py         # Rate limit tests / 速率限制測試
+    test_history.py                   # History manager tests / 歷史管理器測試
+    test_tag_extraction.py            # Tag extraction tests / 標籤提取測試
+  .gitignore                          # Git ignore rules / Git 忽略規則
+  CHANGELOG.md                        # Version history / 版本歷史
+  developer_guide.md                  # Developer guide / 開發者指南
   README.md                           # This file / 本文件
 ```
 
@@ -289,11 +302,39 @@ Auto-Explorer 與 Ralph Loop 使用不同的狀態檔，資料互不干擾。但
 
 ---
 
+## Development / 開發
+
+### Running tests / 執行測試
+
+```bash
+# Run all tests (39 tests)
+# 執行全部測試（39 個）
+python -m pytest tests/ -v
+
+# Run a specific test file
+# 執行單一測試檔
+python -m pytest tests/test_tag_extraction.py -v
+```
+
+### Bash syntax check / Bash 語法檢查
+
+```bash
+bash -n scripts/setup-auto-explorer.sh
+bash -n hooks/stop-hook.sh
+```
+
+For more details, see `developer_guide.md`.
+詳細資訊請參閱 `developer_guide.md`。
+
+---
+
 ## Dependencies / 相依套件
 
-- **Python 3** — for JSON parsing (replaces jq)
-  用於 JSON 解析（取代 jq）
+- **Python 3.6+** — for JSON parsing and rate limit checking (f-strings, `datetime.timezone`)
+  用於 JSON 解析與速率限制檢查
 - **Bash** — shell scripts run in Git Bash on Windows
   Shell 腳本在 Windows 上透過 Git Bash 執行
+- **Node.js** — Windows entry point for stop hook (resolves Git Bash vs WSL)
+  Windows 上 stop hook 的入口點（解決 Git Bash 與 WSL 衝突）
 - **Claude Code** — with plugin support
   需要支援插件的 Claude Code
