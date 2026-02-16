@@ -5,6 +5,30 @@ All notable changes to Auto-Explorer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-02-16
+
+### Added
+- **Community detection** (`interest_graph.py communities`): Label propagation algorithm groups related concepts into clusters based on co-occurrence edges. Useful for seeing natural topic groupings like "Docker-CI-GitHub" or "FastAPI-Pydantic-testing"
+- **Structural gap detection** (`interest_graph.py gaps`): Finds concept pairs that share neighbors but aren't directly connected — serendipity-driven suggestions for unexplored combinations
+- **Per-iteration JSONL telemetry**: Each iteration appends a line to `<output_dir>/.session-outcomes.jsonl` with slug, iteration, timestamp, mode, estimated tokens, output KB, and next subtopic. Enables fine-grained session analytics
+
+### Changed
+- `scripts/interest_graph.py`: Added `detect_communities(graph, min_edge_weight)` and `find_gaps(graph, n)` functions; added `communities` and `gaps` CLI commands
+- `hooks/stop-hook.sh`: Continuation path now writes per-iteration JSONL telemetry before feeding the next prompt
+- `tests/test_interest_graph.py`: Added TestCommunityDetection (4 tests) and TestFindGaps (4 tests)
+- Total test count: 296 → 304 (+8 new tests)
+
+## [1.9.0] - 2026-02-16
+
+### Added
+- **Improvement engine** (`scripts/improvement_engine.py`): Analyzes session history to provide adaptive recommendations. Template selection via Thompson Sampling, budget adaptation from past sessions, mode correction tracking, keyword frequency analysis, TF-IDF keyword extraction, and repeat topic detection via Jaccard similarity
+- **Setup integration**: `setup-auto-explorer.sh` now calls the improvement engine at session start to show template recommendations, budget suggestions, and repeat topic warnings
+- `tests/test_improvement_engine.py`: 27 tests across 9 test classes (template stats, suggest template, suggest budget, mode correction, frequent keywords, session similarity, detect repeat, extract keywords, CLI)
+
+### Changed
+- `scripts/setup-auto-explorer.sh`: After mode detection, shows improvement engine suggestions (template recommendation, budget hint, repeat topic detection)
+- Total test count: 269 → 296 (+27 new tests)
+
 ## [1.8.0] - 2026-02-16
 
 ### Added

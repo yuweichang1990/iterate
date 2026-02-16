@@ -254,6 +254,48 @@ How it works:
 
 運作方式：自動遷移（首次運行自動轉換既有關鍵字）、Thompson Sampling（學習你的偏好）、半衰期衰減（90天）、意外發現加分（新穎概念加權）、品質信號（記錄每次 session 的完成方式和效率）。
 
+### Improvement engine / 改進引擎
+
+The improvement engine analyzes your session history and provides adaptive recommendations at session start:
+
+改進引擎分析你的 session 歷史，在 session 開始時提供自適應建議：
+
+- **Template suggestion**: Thompson Sampling picks the best exploration template based on past success rates. "Deep-dive has 80% natural completion rate across 5 sessions."
+  根據過去的成功率用 Thompson Sampling 挑選最佳模板。
+- **Budget adaptation**: Learns whether you tend to exhaust budgets (suggest aggressive) or under-use them (suggest conservative).
+  學習你的預算使用模式，建議合適的等級。
+- **Repeat detection**: Warns when a new topic overlaps significantly with a past session, suggests `--resume` instead.
+  當新主題與過去的 session 重疊時發出警告。
+
+```bash
+# Example setup output:
+# Suggested template: deep-dive (80% success, 5 sessions)
+# Budget hint: history suggests 'aggressive' for research sessions
+# Note: Similar to: Docker containers (docker-k8s)
+```
+
+### Community detection & gap analysis / 社群偵測與缺口分析
+
+The interest graph can detect natural clusters and unexplored connections:
+
+興趣圖譜可以偵測自然叢集和未探索的連結：
+
+```bash
+# See concept communities
+python scripts/interest_graph.py communities
+#   [docker] 5 concepts: ci-cd, docker, github-actions, kubernetes, terraform
+
+# Find structural gaps (unexplored combinations)
+python scripts/interest_graph.py gaps
+#   fastapi <-> kubernetes (3 shared: docker, python, ci-cd)
+```
+
+### Per-iteration telemetry / 每次迭代遙測
+
+Each iteration records a JSONL line to `<output_dir>/.session-outcomes.jsonl` with timestamp, token estimates, and subtopic progression. Useful for analyzing session efficiency and patterns.
+
+每次迭代記錄一行 JSONL 到 `.session-outcomes.jsonl`，包含時間戳、token 估計和子主題進度。
+
 ### Resume a previous session / 恢復之前的 Session
 
 ```bash
@@ -329,27 +371,11 @@ You want to prototype ideas quickly or generate documentation for your team. Run
 
 ## Future Directions / 未來方向
 
-### v1.9.0: Improvement Engine / 改進引擎
+### Prompt Evolution / 提示詞進化
 
-The interest graph (v1.8.0) lays the foundation. The improvement engine builds on top of it:
+Bandit-based selection of prompt variations that produce better outcomes. Track which system messages lead to higher output density and natural completion.
 
-興趣圖譜（v1.8.0）打下基礎，改進引擎在此之上建構：
-
-- **Template bandits / 模板推薦**: Thompson Sampling to pick the best exploration template for a given topic. "Deep-dive works better for infrastructure topics, quickstart for frameworks."
-  用 Thompson Sampling 為主題挑選最佳探索模板。
-- **Budget adaptation / 預算適應**: Learn the right budget (conservative/moderate/aggressive) from session history. If your sessions always hit rate limits at 3 iterations, suggest a smaller budget.
-  從歷史學習合適的預算。如果每次都在 3 輪觸及限制，建議更小的預算。
-- **Repeat detection / 重複偵測**: Detect when a topic has been explored before and suggest deepening instead of re-covering. Uses the interest graph's co-occurrence edges.
-  偵測重複主題，建議深入而非重新覆蓋。
-
-### v1.10.0: Advanced Graph Intelligence / 進階圖譜智慧
-
-- **Community detection / 社群偵測**: Label propagation to find natural clusters in your interest graph. "You have a Docker-CI-GitHub cluster and a FastAPI-Pydantic-testing cluster."
-  標籤傳播演算法找出興趣圖譜中的自然叢集。
-- **Gap-based serendipity / 結構缺口推薦**: Find concept pairs that share neighbors but aren't directly connected. "You know Docker and you know GitHub Actions, but you've never explored Docker + GitHub Actions together."
-  找出共享鄰居但未直接連接的概念對。
-- **Prompt evolution / 提示詞進化**: Bandit-based selection of prompt variations that produce better outcomes. Track which system messages lead to higher output density.
-  基於 bandit 的提示詞變體選擇。追蹤哪些系統訊息產生更高的輸出密度。
+基於 bandit 的提示詞變體選擇。追蹤哪些系統訊息產生更高的輸出密度和自然完成率。
 
 ### Fresh Context Mode / 全新上下文模式
 

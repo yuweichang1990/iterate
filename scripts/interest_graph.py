@@ -378,6 +378,77 @@ def migrate_from_markdown(md_path):
     return graph
 
 
+def detect_communities(graph, min_edge_weight=2):
+    """Simple label propagation community detection.
+
+    Groups concepts into communities based on co-occurrence edges.
+    Returns dict: {community_label: [concept_ids]}.
+    """
+    adj = {}
+    for e in graph["edges"]:
+        if e["w"] < min_edge_weight:
+            continue
+        adj.setdefault(e["src"], []).append(e["tgt"])
+        adj.setdefault(e["tgt"], []).append(e["src"])
+
+    labels = {node: node for node in adj}
+
+    for _ in range(10):
+        changed = False
+        for node in adj:
+            if not adj[node]:
+                continue
+            neighbor_labels = [labels.get(n, n) for n in adj[node]]
+            from collections import Counter
+            most_common = Counter(neighbor_labels).most_common(1)[0][0]
+            if labels[node] != most_common:
+                labels[node] = most_common
+                changed = True
+        if not changed:
+            break
+
+    communities = {}
+    for node, label in labels.items():
+        communities.setdefault(label, []).append(node)
+
+    return communities
+
+
+def find_gaps(graph, n=5):
+    """Find structural gaps: concept pairs that share neighbors but aren't connected.
+
+    Returns list of (node_a, node_b, shared_count, shared_list) tuples.
+    """
+    adj = {}
+    for e in graph["edges"]:
+        adj.setdefault(e["src"], set()).add(e["tgt"])
+        adj.setdefault(e["tgt"], set()).add(e["src"])
+    for cid, c in graph["concepts"].items():
+        for rel in ("broader", "narrower", "related"):
+            for other in c.get(rel, []):
+                adj.setdefault(cid, set()).add(other)
+                adj.setdefault(other, set()).add(cid)
+
+    gaps = []
+    seen = set()
+    nodes = list(adj.keys())
+    for i, node_a in enumerate(nodes):
+        for node_b in nodes[i + 1:]:
+            if node_b in adj.get(node_a, set()):
+                continue
+            key = (node_a, node_b)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            shared = adj.get(node_a, set()) & adj.get(node_b, set())
+            if len(shared) >= 2:
+                gaps.append((node_a, node_b, len(shared), sorted(shared)))
+
+    gaps.sort(key=lambda x: -x[2])
+    return gaps[:n]
+
+
 # --- CLI ---
 
 if __name__ == "__main__":
@@ -450,6 +521,24 @@ if __name__ == "__main__":
         md_path = sys.argv[2] if len(sys.argv) > 2 else str(MD_FILE)
         graph = migrate_from_markdown(md_path)
         print(f"Migrated: {len(graph['concepts'])} concepts, {len(graph['edges'])} edges")
+
+    elif cmd == "communities":
+        graph = load_graph()
+        min_w = int(sys.argv[2]) if len(sys.argv) > 2 else 2
+        communities = detect_communities(graph, min_edge_weight=min_w)
+        for label, members in sorted(communities.items(), key=lambda x: -len(x[1])):
+            if len(members) > 1:
+                print(f"  [{label}] {len(members)} concepts: {', '.join(sorted(members)[:10])}")
+
+    elif cmd == "gaps":
+        graph = load_graph()
+        n = int(sys.argv[2]) if len(sys.argv) > 2 else 5
+        gaps = find_gaps(graph, n=n)
+        if gaps:
+            for a, b, shared_count, shared in gaps:
+                print(f"  {a} <-> {b} ({shared_count} shared: {', '.join(shared[:5])})")
+        else:
+            print("No structural gaps found.")
 
     elif cmd == "update-bandit":
         if len(sys.argv) < 4:

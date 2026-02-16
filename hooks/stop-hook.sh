@@ -357,6 +357,24 @@ else
   rm -f "$TEMP_FILE"
 fi
 
+# --- Per-iteration JSONL telemetry (v1.10.0) ---
+JSONL_FILE="$OUTPUT_DIR/.session-outcomes.jsonl"
+python -c "
+import json, sys
+from datetime import datetime, timezone
+line = {
+    'slug': sys.argv[1],
+    'iteration': int(sys.argv[2]),
+    'timestamp': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+    'mode': sys.argv[3],
+    'tokens_est': int(sys.argv[4]),
+    'output_kb': float(sys.argv[5]),
+    'next_subtopic': sys.argv[6],
+}
+with open(sys.argv[7], 'a', encoding='utf-8') as f:
+    f.write(json.dumps(line, ensure_ascii=False) + '\n')
+" "$TOPIC_SLUG" "$NEXT_ITERATION" "$MODE" "$EST_TOKENS" "$OUTPUT_KB" "$NEXT_SUBTOPIC" "$JSONL_FILE" 2>/dev/null || true
+
 # Build system message
 STEER_INDICATOR=""
 if [[ -n "$STEER_MSG" ]]; then

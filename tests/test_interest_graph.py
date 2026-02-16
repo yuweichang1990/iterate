@@ -533,6 +533,149 @@ version: 1
         os.unlink(md)
 
 
+class TestCommunityDetection(unittest.TestCase):
+    """Test label propagation community detection."""
+
+    def _make_graph_with_edges(self, edges, min_weight=2):
+        graph = ig._empty_graph()
+        today = ig.datetime.now().strftime("%Y-%m-%d")
+        nodes = set()
+        for src, tgt, w in edges:
+            nodes.add(src)
+            nodes.add(tgt)
+            graph["edges"].append({"src": src, "tgt": tgt, "w": w, "lastSeen": today})
+        for n in nodes:
+            graph["concepts"][n] = {
+                "labels": {"en": n.title()}, "category": "general",
+                "weight": 1.0, "lastSeen": today, "sessionCount": 1,
+                "broader": [], "narrower": [], "related": [],
+                "bandit": {"alpha": 1, "beta": 1},
+            }
+        return graph
+
+    def test_empty_graph(self):
+        graph = ig._empty_graph()
+        communities = ig.detect_communities(graph)
+        self.assertEqual(communities, {})
+
+    def test_single_community(self):
+        graph = self._make_graph_with_edges([
+            ("a", "b", 3), ("b", "c", 3), ("a", "c", 2),
+        ])
+        communities = ig.detect_communities(graph, min_edge_weight=2)
+        self.assertEqual(len(communities), 1)
+        members = list(communities.values())[0]
+        self.assertEqual(set(members), {"a", "b", "c"})
+
+    def test_two_communities(self):
+        graph = self._make_graph_with_edges([
+            ("a", "b", 3), ("a", "c", 3),
+            ("x", "y", 3), ("x", "z", 3),
+        ])
+        communities = ig.detect_communities(graph, min_edge_weight=2)
+        self.assertGreaterEqual(len(communities), 2)
+
+    def test_filters_by_min_weight(self):
+        graph = self._make_graph_with_edges([
+            ("a", "b", 1), ("b", "c", 1),
+        ])
+        communities = ig.detect_communities(graph, min_edge_weight=2)
+        self.assertEqual(communities, {})
+
+
+class TestFindGaps(unittest.TestCase):
+    """Test structural gap detection."""
+
+    def test_empty_graph(self):
+        graph = ig._empty_graph()
+        gaps = ig.find_gaps(graph)
+        self.assertEqual(gaps, [])
+
+    def test_finds_gap(self):
+        graph = ig._empty_graph()
+        today = ig.datetime.now().strftime("%Y-%m-%d")
+        # A-B connected, A-C connected, but B-C not connected → gap
+        for n in ["a", "b", "c"]:
+            graph["concepts"][n] = {
+                "labels": {"en": n.upper()}, "category": "general",
+                "weight": 1.0, "lastSeen": today, "sessionCount": 1,
+                "broader": [], "narrower": [], "related": [],
+                "bandit": {"alpha": 1, "beta": 1},
+            }
+        graph["edges"] = [
+            {"src": "a", "tgt": "b", "w": 3, "lastSeen": today},
+            {"src": "a", "tgt": "c", "w": 3, "lastSeen": today},
+        ]
+        # B and C share neighbor A, but need >=2 shared neighbors
+        # Add D connected to both B and C
+        graph["concepts"]["d"] = {
+            "labels": {"en": "D"}, "category": "general",
+            "weight": 1.0, "lastSeen": today, "sessionCount": 1,
+            "broader": [], "narrower": [], "related": [],
+            "bandit": {"alpha": 1, "beta": 1},
+        }
+        graph["edges"].extend([
+            {"src": "b", "tgt": "d", "w": 3, "lastSeen": today},
+            {"src": "c", "tgt": "d", "w": 3, "lastSeen": today},
+        ])
+        gaps = ig.find_gaps(graph)
+        self.assertTrue(len(gaps) > 0)
+        gap_pairs = [(g[0], g[1]) for g in gaps]
+        # B-C should be a gap (shared: A and D)
+        self.assertTrue(
+            ("b", "c") in gap_pairs or ("c", "b") in gap_pairs
+        )
+
+    def test_no_gap_when_fully_connected(self):
+        graph = ig._empty_graph()
+        today = ig.datetime.now().strftime("%Y-%m-%d")
+        for n in ["a", "b", "c"]:
+            graph["concepts"][n] = {
+                "labels": {"en": n.upper()}, "category": "general",
+                "weight": 1.0, "lastSeen": today, "sessionCount": 1,
+                "broader": [], "narrower": [], "related": [],
+                "bandit": {"alpha": 1, "beta": 1},
+            }
+        # Fully connected triangle — no gaps possible
+        graph["edges"] = [
+            {"src": "a", "tgt": "b", "w": 3, "lastSeen": today},
+            {"src": "a", "tgt": "c", "w": 3, "lastSeen": today},
+            {"src": "b", "tgt": "c", "w": 3, "lastSeen": today},
+        ]
+        gaps = ig.find_gaps(graph)
+        self.assertEqual(gaps, [])
+
+    def test_respects_n_limit(self):
+        graph = ig._empty_graph()
+        today = ig.datetime.now().strftime("%Y-%m-%d")
+        # Create a star topology: hub connects to many spokes, spokes share hub as neighbor
+        for i in range(10):
+            n = f"spoke{i}"
+            graph["concepts"][n] = {
+                "labels": {"en": n.title()}, "category": "general",
+                "weight": 1.0, "lastSeen": today, "sessionCount": 1,
+                "broader": [], "narrower": [], "related": [],
+                "bandit": {"alpha": 1, "beta": 1},
+            }
+        graph["concepts"]["hub1"] = {
+            "labels": {"en": "Hub1"}, "category": "general",
+            "weight": 1.0, "lastSeen": today, "sessionCount": 1,
+            "broader": [], "narrower": [], "related": [],
+            "bandit": {"alpha": 1, "beta": 1},
+        }
+        graph["concepts"]["hub2"] = {
+            "labels": {"en": "Hub2"}, "category": "general",
+            "weight": 1.0, "lastSeen": today, "sessionCount": 1,
+            "broader": [], "narrower": [], "related": [],
+            "bandit": {"alpha": 1, "beta": 1},
+        }
+        for i in range(10):
+            graph["edges"].append({"src": "hub1", "tgt": f"spoke{i}", "w": 3, "lastSeen": today})
+            graph["edges"].append({"src": "hub2", "tgt": f"spoke{i}", "w": 3, "lastSeen": today})
+        gaps = ig.find_gaps(graph, n=3)
+        self.assertLessEqual(len(gaps), 3)
+
+
 class TestCLI(unittest.TestCase):
     """Test CLI dispatch."""
 

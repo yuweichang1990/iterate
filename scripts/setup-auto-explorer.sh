@@ -435,6 +435,38 @@ if [[ -n "$FORCE_MODE" ]]; then
   MODE="$FORCE_MODE"
 fi
 
+# --- Improvement engine suggestions (v1.9.0) ---
+# Show template recommendation if user didn't specify --template
+if [[ -z "$TEMPLATE_NAME" ]]; then
+  TPL_SUGGESTION=$(python "$SCRIPT_DIR/improvement_engine.py" suggest-template "$MODE" 2>/dev/null || echo "")
+  if [[ -n "$TPL_SUGGESTION" ]]; then
+    echo "Suggested template: $TPL_SUGGESTION"
+    echo "   (use --template <name> to apply)"
+    echo ""
+  fi
+fi
+
+# Show budget recommendation if data supports it
+BUDGET_SUGGESTION=$(python "$SCRIPT_DIR/improvement_engine.py" suggest-budget "$MODE" 2>/dev/null || echo "")
+if [[ -n "$BUDGET_SUGGESTION" ]]; then
+  echo "Budget hint: history suggests '$BUDGET_SUGGESTION' for $MODE sessions"
+  echo "   (use --budget $BUDGET_SUGGESTION to apply)"
+  echo ""
+fi
+
+# Detect repeat topic — warn if this topic overlaps with a recent session
+TOPIC_WORDS=$(echo "$TOPIC" | tr '[:upper:]' '[:lower:]' | tr ' ' '\n' | python -c "
+import sys, json
+words = [w.strip() for w in sys.stdin if len(w.strip()) > 2]
+print(json.dumps(words))
+" 2>/dev/null || echo "[]")
+REPEAT_MATCH=$(python "$SCRIPT_DIR/improvement_engine.py" detect-repeat "$TOPIC_WORDS" 2>/dev/null || echo "")
+if [[ -n "$REPEAT_MATCH" ]]; then
+  echo "Note: $REPEAT_MATCH"
+  echo "   Consider --resume to continue the previous session instead."
+  echo ""
+fi
+
 # --- Template loading ---
 TEMPLATE_BODY=""
 if [[ -n "$TEMPLATE_NAME" ]]; then

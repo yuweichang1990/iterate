@@ -278,10 +278,12 @@ auto-explorer/
     history.py                        # Session history manager / 歷史管理器
     helpers.py                        # Shared utilities (frontmatter, slug, tags) / 共用工具
     interest_graph.py                 # Interest graph & Thompson Sampling / 興趣圖譜與推薦引擎
+    improvement_engine.py             # Adaptive suggestions engine / 自適應建議引擎
   tests/
     test_check_rate_limits.py         # Rate limit tests / 速率限制測試
     test_history.py                   # History manager tests / 歷史管理器測試
     test_interest_graph.py            # Interest graph tests / 興趣圖譜測試
+    test_improvement_engine.py        # Improvement engine tests / 改進引擎測試
     test_tag_extraction.py            # Tag extraction tests / 標籤提取測試
     test_mode_detection.py            # Build/research mode detection tests / 模式偵測測試
     test_helpers.py                   # Shared helpers tests / 共用工具測試
@@ -325,8 +327,8 @@ Auto-Explorer 與 Ralph Loop 使用不同的狀態檔，資料互不干擾。但
 ### Running tests / 執行測試
 
 ```bash
-# Run all tests (269 tests)
-# 執行全部測試（269 個）
+# Run all tests (304 tests)
+# 執行全部測試（304 個）
 python -m pytest tests/ -v
 
 # Run a specific test file
