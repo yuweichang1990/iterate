@@ -51,7 +51,8 @@ OPTIONS:
   --compare               Shorthand for --template comparison (structured
                             side-by-side comparison with evaluation and verdict)
   --template <name>       Use an exploration template (deep-dive, quickstart,
-                            architecture-review, security-audit, comparison)
+                            architecture-review, security-audit, comparison,
+                            dual-lens)
   --max-iterations <n>    Optional hard cap on iterations (default: unlimited)
   --resume [slug]         Resume a previous session that was rate-limited,
                             max-iterations, cancelled, or errored.
@@ -131,7 +132,7 @@ HELP_EOF
     --template)
       if [[ -z "${2:-}" ]]; then
         echo "Error: --template requires a template name" >&2
-        echo "   Available templates: deep-dive, quickstart, architecture-review, security-audit, comparison" >&2
+        echo "   Available templates: deep-dive, quickstart, architecture-review, security-audit, comparison, dual-lens" >&2
         exit 1
       fi
       TEMPLATE_NAME="$2"
@@ -490,6 +491,12 @@ mkdir -p "$OUTPUT_DIR"
 # Replace OUTPUT_DIR placeholder in template body (must happen after OUTPUT_DIR is set)
 if [[ -n "$TEMPLATE_BODY" ]]; then
   TEMPLATE_BODY="${TEMPLATE_BODY//\{\{OUTPUT_DIR\}\}/$OUTPUT_DIR}"
+fi
+
+# Replace GRAPH_BRIEF placeholder (only when template uses it — zero overhead otherwise)
+if [[ -n "$TEMPLATE_BODY" ]] && [[ "$TEMPLATE_BODY" == *'{{GRAPH_BRIEF}}'* ]]; then
+  GRAPH_BRIEF=$(python "$SCRIPT_DIR/interest_graph.py" graph-brief 2>/dev/null || echo "(No interest graph data available)")
+  TEMPLATE_BODY=$(python -c "import sys; body=sys.stdin.read(); print(body.replace('{{GRAPH_BRIEF}}', sys.argv[1]))" "$GRAPH_BRIEF" <<< "$TEMPLATE_BODY")
 fi
 
 # Write .topic file for readability (especially useful for CJK hash-based slugs)

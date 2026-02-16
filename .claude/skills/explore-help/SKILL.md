@@ -35,6 +35,7 @@ Start an autonomous exploration session.
   - `quickstart` — Practical focus with working examples, get productive fast
   - `architecture-review` — Structural analysis of a codebase (dependencies, patterns, risks)
   - `security-audit` — Security-focused analysis (vulnerabilities, attack surface, hardening)
+  - `dual-lens` — Dual exploit/explore system: leverages your interest graph (System A) and fresh thinking (System B) with rigorous synthesis to break filter bubbles
 - `--max-iterations N` — Optional hard cap on iterations (default: unlimited)
 - `--resume [slug]` — Resume a previous session that was rate-limited, max-iterations, cancelled, or errored. If slug is omitted, resumes the most recent one. The session continues writing to the same output directory with full context of previous progress.
 
@@ -50,6 +51,7 @@ Start an autonomous exploration session.
 /auto-explore --template quickstart FastAPI
 /auto-explore --template architecture-review
 /auto-explore --template security-audit
+/auto-explore --template dual-lens how to scale our backend
 /auto-explore
 /auto-explore --resume
 /auto-explore --resume rust-async

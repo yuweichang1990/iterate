@@ -5,6 +5,21 @@ All notable changes to Auto-Explorer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.0] - 2026-02-17
+
+### Added
+- **Dual-lens exploration template** (`--template dual-lens`): Dual exploit/explore system that breaks filter bubbles. System A leverages the interest graph for connected insights and adjacent-possible proposals. System B deliberately ignores it, using cross-domain analogies, contrarian thinking, and first-principles reasoning. A strict Synthesis Layer evaluates all proposals through a 2-gate pipeline (Applicability, Feasibility) then scores on 6 dimensions (impact, confidence, effort, novelty, risk, durability) with evidence requirements and failure mode analysis
+- **Interest graph brief** (`interest_graph.py graph-brief`): New `generate_brief()` function and CLI command producing a compact text summary of top concepts, knowledge communities, and structural gaps — injected into templates via `{{GRAPH_BRIEF}}` placeholder
+- `docs/adr/0002-dual-lens-template.md`: Architecture Decision Record documenting the dual-system design, equal iteration budgets, strict synthesis gates, and lazy `{{GRAPH_BRIEF}}` evaluation
+- `tests/test_dual_lens.py`: 15 tests across 2 test classes (TestDualLensTemplate, TestGraphBrief)
+
+### Changed
+- `scripts/setup-auto-explorer.sh`: Added `{{GRAPH_BRIEF}}` placeholder substitution — only runs when template contains the placeholder (zero overhead for other templates), uses Python for multi-line substitution
+- `scripts/improvement_engine.py`: Added `"dual-lens"` to template list for Thompson Sampling
+- `tests/test_templates.py`: Added `"dual-lens"` and `"comparison"` to `_load_all()` builtin template checks
+- `.claude/skills/explore-help/SKILL.md`: Added dual-lens template to documentation with description and example
+- Total test count: 320 → 335 (+15 new tests)
+
 ## [1.11.0] - 2026-02-17
 
 ### Changed

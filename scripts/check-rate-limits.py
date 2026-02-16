@@ -8,6 +8,7 @@ compares against configured limits in auto-explorer-limits.json.
 Output: JSON with { "allowed": true/false, "details": [...] }
 """
 
+import importlib.util
 import json
 import os
 import sys
@@ -18,6 +19,13 @@ CLAUDE_DIR = Path.home() / ".claude"
 LIMITS_FILE = CLAUDE_DIR / "auto-explorer-limits.json"
 STATS_FILE = CLAUDE_DIR / "stats-cache.json"
 STATE_FILE = Path(".claude") / "auto-explorer.local.md"
+
+# Import parse_frontmatter from helpers.py (same directory)
+_helpers_path = Path(__file__).parent / "helpers.py"
+_spec = importlib.util.spec_from_file_location("helpers", str(_helpers_path))
+_helpers = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_helpers)
+_parse_frontmatter = _helpers.parse_frontmatter
 
 
 def load_json(path):
@@ -66,18 +74,14 @@ def get_session_start_time():
     try:
         with open(STATE_FILE, "r", encoding="utf-8") as f:
             content = f.read()
-        in_frontmatter = False
-        for line in content.split("\n"):
-            if line.strip() == "---":
-                if in_frontmatter:
-                    break
-                in_frontmatter = True
-                continue
-            if in_frontmatter and line.startswith("started_at:"):
-                ts = line.split(":", 1)[1].strip().strip('"')
-                return datetime.fromisoformat(ts.replace("Z", "+00:00"))
-    except Exception:
+        fields = _parse_frontmatter(content)
+        ts = fields.get("started_at", "")
+        if ts:
+            return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except FileNotFoundError:
         pass
+    except Exception as e:
+        print(f"auto-explorer: warning: failed to parse session start time: {e}", file=sys.stderr)
     return None
 
 

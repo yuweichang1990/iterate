@@ -339,6 +339,7 @@ python -m pytest tests/test_history.py -v
 | `tests/test_mode_detection.py` | 英文/中文動作動詞 build 偵測、research 主題排除、大小寫不敏感、空格變體 | 9 (76 subtests) |
 | `tests/test_helpers.py` | frontmatter 解析、slug 生成、過期偵測、主題建議、duration 格式化、rate summary、budget-iterations、quality signals、topic words、state file reader、telemetry append | 39 |
 | `tests/test_auto_export.py` | 自動匯出 flag file 一致性、summary prompt 內容、清理機制 | 9 |
+| `tests/test_dual_lens.py` | 雙透鏡模板載入/結構、graph-brief 生成（空圖譜回退、概念列表、社群、缺口、上限） | 15 |
 | `tests/test_bash_syntax.py` | `bash -n` 語法檢查（Windows 自動尋找 Git Bash，避免 WSL） | 2 |
 | `tests/test_version_consistency.py` | plugin.json、marketplace.json、CHANGELOG.md 版本一致性 | 4 |
 

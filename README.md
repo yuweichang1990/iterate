@@ -327,8 +327,8 @@ Auto-Explorer 與 Ralph Loop 使用不同的狀態檔，資料互不干擾。但
 ### Running tests / 執行測試
 
 ```bash
-# Run all tests (320 tests)
-# 執行全部測試（320 個）
+# Run all tests (335 tests)
+# 執行全部測試（335 個）
 python -m pytest tests/ -v
 
 # Run a specific test file

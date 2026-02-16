@@ -13,6 +13,7 @@ CLI subcommands:
   suggest <n>                       Suggest top-n topics via Thompson Sampling
   decay                             Apply half-life decay to all weights
   generate-md                       Generate user-interests.md from graph
+  graph-brief                       Compact brief for template injection
   migrate <md_path>                 One-time migration from user-interests.md
   update-bandit <id> <engaged>      Update bandit feedback (true/false)
 """
@@ -23,7 +24,7 @@ import random
 import re
 import sys
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone
 from itertools import combinations
 from pathlib import Path
 
@@ -55,7 +56,7 @@ def _empty_graph():
 
 def save_graph(graph):
     """Write interest graph to disk."""
-    graph["meta"]["lastUpdated"] = datetime.now().strftime("%Y-%m-%d")
+    graph["meta"]["lastUpdated"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     GRAPH_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(GRAPH_FILE, "w", encoding="utf-8") as f:
         json.dump(graph, f, indent=2, ensure_ascii=False)
@@ -68,7 +69,7 @@ def add_concepts(graph, concepts_data):
       id (str), labels (dict), category (str),
       broader (list), narrower (list), related (list)
     """
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     for c in concepts_data:
         cid = c["id"]
         if cid in graph["concepts"]:
@@ -101,7 +102,7 @@ def record_cooccurrences(graph, keywords):
 
     keywords: list of concept IDs that appeared together.
     """
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     edge_map = {}
     for i, e in enumerate(graph["edges"]):
         key = (min(e["src"], e["tgt"]), max(e["src"], e["tgt"]))
@@ -126,7 +127,7 @@ def apply_decay(graph):
     Prunes concepts with weight < 0.01 and sessionCount <= 1.
     """
     half_life = graph["meta"].get("halfLifeDays", 90)
-    today = datetime.now()
+    today = datetime.now(timezone.utc).date()
 
     to_remove = []
     for cid, concept in graph["concepts"].items():
@@ -134,7 +135,7 @@ def apply_decay(graph):
         if not last_seen:
             continue
         try:
-            last = datetime.strptime(last_seen, "%Y-%m-%d")
+            last = datetime.strptime(last_seen, "%Y-%m-%d").date()
             days = (today - last).days
             if days <= 0:
                 continue
@@ -162,7 +163,7 @@ def suggest_topics(graph, n=5, recent_sessions=None, seed=None):
 
     recent = set(recent_sessions or [])
     half_life = graph["meta"].get("halfLifeDays", 90)
-    today = datetime.now()
+    today = datetime.now(timezone.utc).date()
 
     candidates = []
     for cid, concept in graph["concepts"].items():
@@ -179,7 +180,7 @@ def suggest_topics(graph, n=5, recent_sessions=None, seed=None):
         days = 0
         if last_seen:
             try:
-                days = (today - datetime.strptime(last_seen, "%Y-%m-%d")).days
+                days = (today - datetime.strptime(last_seen, "%Y-%m-%d").date()).days
                 decay = math.pow(2, -days / half_life)
             except ValueError:
                 decay = 0.5
@@ -278,7 +279,7 @@ def generate_markdown(graph):
     lines.append("## Suggested Next Directions")
     lines.append("")
 
-    suggestions = suggest_topics(graph, n=10)
+    suggestions = suggest_topics(graph, n=10, seed=42)
     if suggestions:
         for i, (cid, score, reason) in enumerate(suggestions, 1):
             label = graph["concepts"][cid]["labels"].get("en", cid)
@@ -287,6 +288,59 @@ def generate_markdown(graph):
         lines.append("No suggestions yet — explore more topics to build your graph.")
 
     lines.append("")
+    return "\n".join(lines)
+
+
+def generate_brief(graph, max_concepts=15, max_communities=5, max_gaps=5):
+    """Generate a compact text brief of the interest graph for template injection.
+
+    Outputs: "Top Concepts", "Knowledge Communities", "Structural Gaps".
+    Returns "(No interest graph data available)" on empty graph.
+    """
+    if not graph["concepts"]:
+        return "(No interest graph data available)"
+
+    lines = []
+
+    # Top Concepts by weight
+    sorted_concepts = sorted(
+        graph["concepts"].items(), key=lambda x: -x[1]["weight"]
+    )[:max_concepts]
+    lines.append("Top Concepts:")
+    for cid, concept in sorted_concepts:
+        label = concept["labels"].get("en", cid)
+        cat = concept.get("category", "general")
+        lines.append(f"  - {label} (category: {cat}, weight: {concept['weight']:.1f})")
+
+    # Knowledge Communities (use min_edge_weight=1 for inclusive brief)
+    communities = detect_communities(graph, min_edge_weight=1)
+    multi_member = {
+        label: members
+        for label, members in sorted(
+            communities.items(), key=lambda x: -len(x[1])
+        )
+        if len(members) > 1
+    }
+    if multi_member:
+        lines.append("")
+        lines.append("Knowledge Communities:")
+        for i, (label, members) in enumerate(multi_member.items()):
+            if i >= max_communities:
+                break
+            display = ", ".join(sorted(members)[:8])
+            if len(members) > 8:
+                display += f", ... ({len(members)} total)"
+            lines.append(f"  - [{label}] {display}")
+
+    # Structural Gaps
+    gaps = find_gaps(graph, n=max_gaps)
+    if gaps:
+        lines.append("")
+        lines.append("Structural Gaps:")
+        for a, b, shared_count, shared in gaps:
+            suffix = ", ..." if shared_count > 3 else ""
+            lines.append(f"  - {a} <-> {b} ({shared_count} shared: {', '.join(shared[:3])}{suffix})")
+
     return "\n".join(lines)
 
 
@@ -319,7 +373,7 @@ def migrate_from_markdown(md_path):
 
     # Parse categories and keywords
     current_category = "general"
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     for line in content.split("\n"):
         cat_match = re.match(r"^## (.+)", line)
@@ -522,6 +576,10 @@ if __name__ == "__main__":
         graph = load_graph()
         md = generate_markdown(graph)
         print(md)
+
+    elif cmd == "graph-brief":
+        graph = load_graph()
+        print(generate_brief(graph))
 
     elif cmd == "migrate":
         md_path = sys.argv[2] if len(sys.argv) > 2 else str(MD_FILE)

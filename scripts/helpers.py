@@ -152,7 +152,10 @@ def _read_state_fields(state_file):
         with open(state_file, 'r', encoding='utf-8') as f:
             content = f.read()
         return parse_frontmatter(content)
-    except Exception:
+    except FileNotFoundError:
+        return None
+    except Exception as e:
+        print(f"auto-explorer: warning: failed to read state file {state_file}: {e}", file=sys.stderr)
         return None
 
 
@@ -443,8 +446,8 @@ def get_session_stats(transcript_path, output_dir):
                         tokens += usage.get('output_tokens', 0)
                     except json.JSONDecodeError:
                         continue
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"auto-explorer: warning: failed to read transcript {transcript_path}: {e}", file=sys.stderr)
 
     files_written = 0
     total_bytes = 0

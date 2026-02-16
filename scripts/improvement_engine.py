@@ -245,7 +245,7 @@ if __name__ == "__main__":
     if cmd == "suggest-template":
         mode = sys.argv[2] if len(sys.argv) > 2 else "research"
         sessions = load_completed_sessions()
-        templates = ["deep-dive", "quickstart", "architecture-review", "security-audit", "comparison"]
+        templates = ["deep-dive", "quickstart", "architecture-review", "security-audit", "comparison", "dual-lens"]
         tpl, score = suggest_template(sessions, templates, mode=mode)
         if tpl:
             stats = template_stats(sessions)

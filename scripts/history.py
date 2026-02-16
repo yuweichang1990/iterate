@@ -64,9 +64,7 @@ def cmd_add(args):
         sys.exit(1)
     history = load_history()
     # Fix any stale sessions from previous crashes before adding new one
-    if fix_stale_sessions(history):
-        save_history(history)
-        history = load_history()  # Re-read after fix
+    fix_stale_sessions(history)
     history.append({
         "topic": args[0],
         "mode": args[1],
@@ -83,39 +81,68 @@ def cmd_add(args):
     save_history(history)
 
 
-def cmd_end(args):
-    """Mark the most recent matching session as ended.
+def _parse_end_args(args):
+    """Parse positional CLI args into a named dict with defaults.
 
-    Usage: history.py end <slug> <iterations> <status> [reason] [estimated_tokens] [files_written] [total_output_kb]
-                         [completion_type] [iter_ratio] [output_density] [keywords_json]
+    Positional order:
+      0: slug          (required)
+      1: iterations     (required)
+      2: status         (required)
+      3: reason         (optional, default "")
+      4: estimated_tokens (optional, default 0)
+      5: files_written   (optional, default 0)
+      6: total_output_kb (optional, default 0.0)
+      7: completion_type (optional, default "")
+      8: iter_ratio      (optional, default 0.0)
+      9: output_density  (optional, default 0.0)
+     10: keywords_json   (optional, default "")
     """
-    if len(args) < 3:
-        print("Usage: history.py end <slug> <iterations> <status> [reason] [estimated_tokens] [files_written] [total_output_kb] [completion_type] [iter_ratio] [output_density] [keywords_json]", file=sys.stderr)
-        sys.exit(1)
-    slug = args[0]
-    iterations = int(args[1])
-    status = args[2]
-    reason = args[3] if len(args) > 3 else ""
-    estimated_tokens = int(args[4]) if len(args) > 4 and args[4] else 0
-    files_written = int(args[5]) if len(args) > 5 and args[5] else 0
-    total_output_kb = float(args[6]) if len(args) > 6 and args[6] else 0.0
-    completion_type = args[7] if len(args) > 7 and args[7] else ""
-    iter_ratio = float(args[8]) if len(args) > 8 and args[8] else 0.0
-    output_density = float(args[9]) if len(args) > 9 and args[9] else 0.0
-    keywords_json = args[10] if len(args) > 10 and args[10] else ""
+    def _str(i, default=""):
+        return args[i] if len(args) > i and args[i] else default
 
-    # Parse keywords from JSON
+    def _int(i, default=0):
+        v = _str(i)
+        return int(v) if v else default
+
+    def _float(i, default=0.0):
+        v = _str(i)
+        return float(v) if v else default
+
     keywords = []
-    if keywords_json:
+    kw_json = _str(10)
+    if kw_json:
         try:
-            keywords = json.loads(keywords_json)
+            keywords = json.loads(kw_json)
         except (json.JSONDecodeError, TypeError):
             keywords = []
 
+    return {
+        "slug": args[0],
+        "iterations": int(args[1]),
+        "status": args[2],
+        "reason": _str(3),
+        "estimated_tokens": _int(4),
+        "files_written": _int(5),
+        "total_output_kb": _float(6),
+        "completion_type": _str(7),
+        "iter_ratio": _float(8),
+        "output_density": _float(9),
+        "keywords": keywords,
+    }
+
+
+def end_session(slug, iterations, status, reason="",
+                estimated_tokens=0, files_written=0, total_output_kb=0.0,
+                completion_type="", iter_ratio=0.0, output_density=0.0,
+                keywords=None):
+    """Mark the most recent matching session as ended.
+
+    This is the internal API — callers use keyword arguments for clarity.
+    cmd_end() is the CLI wrapper that parses positional args.
+    """
     history = load_history()
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # Find the most recent entry with matching slug that is still running
     for entry in reversed(history):
         if entry.get("slug") == slug and entry.get("status") == "running":
             entry["iterations"] = iterations
@@ -125,7 +152,6 @@ def cmd_end(args):
             entry["estimated_tokens"] = estimated_tokens
             entry["files_written"] = files_written
             entry["total_output_kb"] = total_output_kb
-            # Quality signals (v1.8.0)
             if completion_type or iter_ratio or output_density:
                 entry["quality_signals"] = {}
                 if completion_type:
@@ -139,6 +165,20 @@ def cmd_end(args):
             break
 
     save_history(history)
+
+
+def cmd_end(args):
+    """CLI wrapper for end_session() — parses positional args.
+
+    Usage: history.py end <slug> <iterations> <status> [reason] [estimated_tokens]
+           [files_written] [total_output_kb] [completion_type] [iter_ratio]
+           [output_density] [keywords_json]
+    """
+    if len(args) < 3:
+        print("Usage: history.py end <slug> <iterations> <status> [reason] ...", file=sys.stderr)
+        sys.exit(1)
+    parsed = _parse_end_args(args)
+    end_session(**parsed)
 
 
 RESUMABLE_STATUSES = {"rate-limited", "max-iterations", "cancelled", "error"}
@@ -261,8 +301,8 @@ def cmd_show():
                         k, v = line.split(":", 1)
                         fields[k.strip()] = v.strip().strip('"')
                 active = fields
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"auto-explorer: warning: failed to read active session: {e}", file=sys.stderr)
 
     now = datetime.now(timezone.utc)
     today_str = now.strftime("%Y-%m-%d")

@@ -91,7 +91,7 @@ class TestBuiltinTemplateContent(unittest.TestCase):
 
     def _load_all(self):
         templates = []
-        for name in ("deep-dive", "quickstart", "architecture-review", "security-audit"):
+        for name in ("deep-dive", "quickstart", "architecture-review", "security-audit", "comparison", "dual-lens"):
             tpl = helpers.load_template(name, str(TEMPLATES_DIR))
             templates.append(tpl)
         return templates
