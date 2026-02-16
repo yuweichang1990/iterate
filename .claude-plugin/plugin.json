@@ -1,0 +1,15 @@
+{
+  "name": "auto-explorer",
+  "description": "Autonomous exploration and interest tracking system. Claude self-directs multi-iteration research on any topic, writing structured findings and dynamically choosing next sub-topics each round.",
+  "version": "1.0.0",
+  "author": {
+    "name": "ywcha",
+    "email": ""
+  },
+  "skills": [
+    "./.claude/skills/auto-explore",
+    "./.claude/skills/cancel-explore",
+    "./.claude/skills/explore-status",
+    "./.claude/skills/explore-help"
+  ]
+}
