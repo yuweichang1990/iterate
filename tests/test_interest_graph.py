@@ -675,6 +675,28 @@ class TestFindGaps(unittest.TestCase):
         gaps = ig.find_gaps(graph, n=3)
         self.assertLessEqual(len(gaps), 3)
 
+    def test_large_graph_safeguard(self):
+        """Should return empty list when node count exceeds max_nodes."""
+        graph = ig._empty_graph()
+        today = ig.datetime.now().strftime("%Y-%m-%d")
+        # Create a graph with many nodes
+        for i in range(10):
+            graph["concepts"][f"n{i}"] = {
+                "labels": {"en": f"N{i}"}, "category": "general",
+                "weight": 1.0, "lastSeen": today, "sessionCount": 1,
+                "broader": [], "narrower": [], "related": [],
+                "bandit": {"alpha": 1, "beta": 1},
+            }
+        # Connect them all to a hub
+        for i in range(10):
+            graph["edges"].append({"src": "hub", "tgt": f"n{i}", "w": 3, "lastSeen": today})
+        # With max_nodes=5, should return empty (11 nodes > 5)
+        gaps = ig.find_gaps(graph, n=5, max_nodes=5)
+        self.assertEqual(gaps, [])
+        # With default max_nodes (500), should work normally
+        gaps_normal = ig.find_gaps(graph, n=5)
+        self.assertIsInstance(gaps_normal, list)
+
 
 class TestCLI(unittest.TestCase):
     """Test CLI dispatch."""

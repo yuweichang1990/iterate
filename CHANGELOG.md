@@ -5,6 +5,21 @@ All notable changes to Auto-Explorer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] - 2026-02-17
+
+### Changed
+- **Stop hook deduplication**: Extracted `end_session()` function in `stop-hook.sh`, consolidating 3 nearly-identical exit paths (summary-pending, max-iterations, rate-limited) into a single shared function. Reduces ~45 lines of duplicated code
+- **Quality signals via helpers.py**: Added `compute_quality_signals()` function and `compute-quality-signals` CLI subcommand to `helpers.py`, replacing 6 inline `python -c` blocks in `stop-hook.sh`
+- **Topic word extraction via helpers.py**: Added `extract_topic_words()` function and `extract-topic-words` CLI subcommand to `helpers.py`, replacing 1 inline Python block in `setup-auto-explorer.sh`
+- **Module-level imports**: Moved `import os` to top level in `helpers.py` (was deferred inside 3 functions) and `from collections import Counter` to top level in `interest_graph.py` (was inside loop body)
+- **Consolidated state file reads**: Extracted `_read_state_fields()` in `helpers.py` — single read point used by `check_stale_session()`, `get_active_info()`, and `get_stale_info()`
+- **Dashboard frontmatter reuse**: `history.py cmd_show()` now imports and uses `parse_frontmatter()` from helpers instead of duplicating the parsing logic
+- **Gap detection safeguard**: `find_gaps()` in `interest_graph.py` now accepts `max_nodes` parameter (default 500) and returns empty list for graphs exceeding this threshold, preventing O(n²) slowdown on large interest graphs
+- **Telemetry extraction**: Extracted last inline `python -c` block from `stop-hook.sh` — per-iteration JSONL telemetry writer moved to `append_telemetry()` function with `append-telemetry` CLI subcommand in `helpers.py`. Stop hook is now entirely free of inline Python
+- `tests/test_helpers.py`: Added TestComputeQualitySignals (4), TestExtractTopicWords (5), TestReadStateFields (3), TestAppendTelemetry (3)
+- `tests/test_interest_graph.py`: Added `test_large_graph_safeguard` (1 test)
+- Total test count: 304 → 320 (+16 new tests)
+
 ## [1.10.0] - 2026-02-16
 
 ### Added

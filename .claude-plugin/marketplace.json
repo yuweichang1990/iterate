@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Run Claude autonomously for hours — research topics or build features in a self-directing loop with improvement engine, interest graph with community detection, Thompson Sampling suggestions, exploration templates, HTML export, compare mode, budget control, session resume, per-iteration telemetry, and mid-session steering",
-    "version": "1.10.0"
+    "version": "1.11.0"
   },
   "plugins": [
     {
       "name": "auto-explorer",
       "source": "./",
       "description": "Run Claude autonomously for hours — not minutes. One command starts a multi-iteration loop: research any topic or build features with automatic planning, enhancement, and structured Markdown output. Improvement engine with adaptive template/budget suggestions, interest graph with Thompson Sampling and community detection, exploration templates (deep-dive, quickstart, architecture-review, security-audit, comparison), HTML report export, compare mode, session resume, interactive steering, per-iteration telemetry, token usage reports, budget-controlled rate limiting, dual research/build modes, CJK/bilingual support, and auto-generated summaries.",
-      "version": "1.10.0",
+      "version": "1.11.0",
       "author": {
         "name": "ywcha"
       },

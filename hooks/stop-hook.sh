@@ -94,6 +94,43 @@ get_session_duration() {
   fi
 }
 
+# --- Shared session end logic ---
+# Computes quality signals, records history, runs decay, and prints summary.
+# Args: $1=completion_type  $2=status  $3=reason
+end_session() {
+  local completion_type="$1"
+  local status="$2"
+  local reason="$3"
+
+  local duration
+  duration=$(get_session_duration "$STARTED_AT")
+  local file_count
+  file_count=$(count_output_files "$OUTPUT_DIR")
+
+  # Compute quality signals via helpers.py (replaces 6 inline Python blocks)
+  local qs
+  qs=$(python "$SCRIPT_DIR/scripts/helpers.py" compute-quality-signals "$ITERATION" "$THRESHOLD" "${OUTPUT_KB:-0}" "$SEP" 2>/dev/null || echo "10${SEP}0.5${SEP}0")
+  local budget_iters iter_ratio output_density
+  IFS="$SEP" read -r budget_iters iter_ratio output_density <<< "$qs"
+
+  # Record in history
+  python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "$status" "$reason" \
+    "$EST_TOKENS" "$FILES_WRITTEN" "$OUTPUT_KB" \
+    "$completion_type" "$iter_ratio" "$output_density" "" 2>/dev/null || true
+
+  # Apply interest graph decay
+  python "$SCRIPT_DIR/scripts/interest_graph.py" decay 2>/dev/null || true
+
+  # Print common session summary
+  echo ""
+  echo "   Topic:      $TOPIC"
+  echo "   Mode:       $MODE"
+  echo "   Iterations: $ITERATION"
+  echo "   Duration:   $duration"
+  echo "   Files:      $file_count documents in $OUTPUT_DIR/"
+  echo "   Tokens:     ~$EST_TOKENS output tokens (est.)"
+}
+
 # Get transcript path from hook input (moved early for session stats)
 TRANSCRIPT_PATH=$(echo "$HOOK_INPUT" | python "$SCRIPT_DIR/scripts/helpers.py" extract-json-field transcript_path 2>/dev/null)
 
@@ -114,32 +151,15 @@ fi
 # Check for summary-pending flag (auto-export: summary was just generated)
 SUMMARY_FLAG=".claude/auto-explorer-summary-pending"
 if [[ -f "$SUMMARY_FLAG" ]]; then
-  DURATION=$(get_session_duration "$STARTED_AT")
-  FILE_COUNT=$(count_output_files "$OUTPUT_DIR")
   DONE_REASON=$(cat "$SUMMARY_FLAG" 2>/dev/null || echo "completed")
-  # Compute quality signals
-  COMPLETION_TYPE="natural"
-  BUDGET_ITERS=$(python "$SCRIPT_DIR/scripts/helpers.py" budget-iterations "$THRESHOLD" 2>/dev/null || echo "10")
-  ITER_RATIO=$(python -c "print(round(int('$ITERATION')/max(int('$BUDGET_ITERS'),1),2))" 2>/dev/null || echo "0.5")
-  OUTPUT_DENSITY=$(python -c "print(round(float('${OUTPUT_KB:-0}')/max(int('$ITERATION'),1),1))" 2>/dev/null || echo "0")
-  python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "completed" "$DONE_REASON" \
-    "$EST_TOKENS" "$FILES_WRITTEN" "$OUTPUT_KB" \
-    "$COMPLETION_TYPE" "$ITER_RATIO" "$OUTPUT_DENSITY" "" 2>/dev/null || true
-  python "$SCRIPT_DIR/scripts/interest_graph.py" decay 2>/dev/null || true
+  echo "Auto-Explorer: Task completed!"
+  end_session "natural" "completed" "$DONE_REASON"
+  echo "   Summary:    $OUTPUT_DIR/summary.md"
   # Auto-generate HTML report on completion
   HTML_REPORT=""
   if python "$SCRIPT_DIR/scripts/export-html.py" "$OUTPUT_DIR" 2>/dev/null; then
     HTML_REPORT="$OUTPUT_DIR/report.html"
   fi
-  echo "Auto-Explorer: Task completed!"
-  echo ""
-  echo "   Topic:      $TOPIC"
-  echo "   Mode:       $MODE"
-  echo "   Iterations: $ITERATION"
-  echo "   Duration:   $DURATION"
-  echo "   Files:      $FILE_COUNT documents in $OUTPUT_DIR/"
-  echo "   Tokens:     ~$EST_TOKENS output tokens (est.)"
-  echo "   Summary:    $OUTPUT_DIR/summary.md"
   if [[ -n "$HTML_REPORT" ]]; then
   echo "   HTML:       $HTML_REPORT"
   fi
@@ -151,25 +171,8 @@ fi
 
 # Check if max iterations reached (only if set > 0)
 if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $ITERATION -ge $MAX_ITERATIONS ]]; then
-  DURATION=$(get_session_duration "$STARTED_AT")
-  FILE_COUNT=$(count_output_files "$OUTPUT_DIR")
-  # Compute quality signals
-  COMPLETION_TYPE="budget_exhausted"
-  BUDGET_ITERS=$(python "$SCRIPT_DIR/scripts/helpers.py" budget-iterations "$THRESHOLD" 2>/dev/null || echo "10")
-  ITER_RATIO=$(python -c "print(round(int('$ITERATION')/max(int('$BUDGET_ITERS'),1),2))" 2>/dev/null || echo "0.5")
-  OUTPUT_DENSITY=$(python -c "print(round(float('${OUTPUT_KB:-0}')/max(int('$ITERATION'),1),1))" 2>/dev/null || echo "0")
-  python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "max-iterations" "Completed all $MAX_ITERATIONS iterations" \
-    "$EST_TOKENS" "$FILES_WRITTEN" "$OUTPUT_KB" \
-    "$COMPLETION_TYPE" "$ITER_RATIO" "$OUTPUT_DENSITY" "" 2>/dev/null || true
-  python "$SCRIPT_DIR/scripts/interest_graph.py" decay 2>/dev/null || true
   echo "Auto-Explorer: Completed all $MAX_ITERATIONS iterations."
-  echo ""
-  echo "   Topic:      $TOPIC"
-  echo "   Mode:       $MODE"
-  echo "   Iterations: $ITERATION"
-  echo "   Duration:   $DURATION"
-  echo "   Files:      $FILE_COUNT documents in $OUTPUT_DIR/"
-  echo "   Tokens:     ~$EST_TOKENS output tokens (est.)"
+  end_session "budget_exhausted" "max-iterations" "Completed all $MAX_ITERATIONS iterations"
   echo ""
   echo ""
   echo "   Next steps:"
@@ -191,25 +194,8 @@ if [[ "$HAVE_TRANSCRIPT" == true ]]; then
   IFS="$SEP" read -r RATE_ALLOWED RATE_DETAIL RATE_SUMMARY <<< "$RATE_PARSED"
 
   if [[ "$RATE_ALLOWED" == "no" ]]; then
-    DURATION=$(get_session_duration "$STARTED_AT")
-    FILE_COUNT=$(count_output_files "$OUTPUT_DIR")
-    # Compute quality signals
-    COMPLETION_TYPE="rate_limited"
-    BUDGET_ITERS=$(python "$SCRIPT_DIR/scripts/helpers.py" budget-iterations "$THRESHOLD" 2>/dev/null || echo "10")
-    ITER_RATIO=$(python -c "print(round(int('$ITERATION')/max(int('$BUDGET_ITERS'),1),2))" 2>/dev/null || echo "0.5")
-    OUTPUT_DENSITY=$(python -c "print(round(float('${OUTPUT_KB:-0}')/max(int('$ITERATION'),1),1))" 2>/dev/null || echo "0")
-    python "$SCRIPT_DIR/scripts/history.py" end "$TOPIC_SLUG" "$ITERATION" "rate-limited" "Rate limit threshold reached" \
-      "$EST_TOKENS" "$FILES_WRITTEN" "$OUTPUT_KB" \
-      "$COMPLETION_TYPE" "$ITER_RATIO" "$OUTPUT_DENSITY" "" 2>/dev/null || true
-    python "$SCRIPT_DIR/scripts/interest_graph.py" decay 2>/dev/null || true
     echo "Auto-Explorer: Rate limit reached — stopping exploration."
-    echo ""
-    echo "   Topic:      $TOPIC"
-    echo "   Mode:       $MODE"
-    echo "   Iterations: $ITERATION"
-    echo "   Duration:   $DURATION"
-    echo "   Files:      $FILE_COUNT documents in $OUTPUT_DIR/"
-    echo "   Tokens:     ~$EST_TOKENS output tokens (est.)"
+    end_session "rate_limited" "rate-limited" "Rate limit threshold reached"
     echo ""
     echo "   Exceeded limits:"
     echo "$RATE_DETAIL"
@@ -359,21 +345,7 @@ fi
 
 # --- Per-iteration JSONL telemetry (v1.10.0) ---
 JSONL_FILE="$OUTPUT_DIR/.session-outcomes.jsonl"
-python -c "
-import json, sys
-from datetime import datetime, timezone
-line = {
-    'slug': sys.argv[1],
-    'iteration': int(sys.argv[2]),
-    'timestamp': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-    'mode': sys.argv[3],
-    'tokens_est': int(sys.argv[4]),
-    'output_kb': float(sys.argv[5]),
-    'next_subtopic': sys.argv[6],
-}
-with open(sys.argv[7], 'a', encoding='utf-8') as f:
-    f.write(json.dumps(line, ensure_ascii=False) + '\n')
-" "$TOPIC_SLUG" "$NEXT_ITERATION" "$MODE" "$EST_TOKENS" "$OUTPUT_KB" "$NEXT_SUBTOPIC" "$JSONL_FILE" 2>/dev/null || true
+python "$SCRIPT_DIR/scripts/helpers.py" append-telemetry "$JSONL_FILE" "$TOPIC_SLUG" "$NEXT_ITERATION" "$MODE" "$EST_TOKENS" "$OUTPUT_KB" "$NEXT_SUBTOPIC" 2>/dev/null || true
 
 # Build system message
 STEER_INDICATOR=""

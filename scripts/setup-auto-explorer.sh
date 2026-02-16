@@ -455,11 +455,7 @@ if [[ -n "$BUDGET_SUGGESTION" ]]; then
 fi
 
 # Detect repeat topic — warn if this topic overlaps with a recent session
-TOPIC_WORDS=$(echo "$TOPIC" | tr '[:upper:]' '[:lower:]' | tr ' ' '\n' | python -c "
-import sys, json
-words = [w.strip() for w in sys.stdin if len(w.strip()) > 2]
-print(json.dumps(words))
-" 2>/dev/null || echo "[]")
+TOPIC_WORDS=$(python "$SCRIPT_DIR/helpers.py" extract-topic-words "$TOPIC" 2>/dev/null || echo "[]")
 REPEAT_MATCH=$(python "$SCRIPT_DIR/improvement_engine.py" detect-repeat "$TOPIC_WORDS" 2>/dev/null || echo "")
 if [[ -n "$REPEAT_MATCH" ]]; then
   echo "Note: $REPEAT_MATCH"

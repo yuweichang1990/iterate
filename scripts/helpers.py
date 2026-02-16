@@ -21,11 +21,15 @@ CLI subcommands:
   load-template <name> <dir> [sep]       Load exploration template by name
   list-templates <dir>                   List available exploration templates
   budget-iterations [threshold]          Map threshold to budget iterations
+  compute-quality-signals <iter> <threshold> <output_kb> [sep]  Compute quality signals
+  extract-topic-words <topic> [min_len]  Extract topic words for repeat detection
+  append-telemetry <jsonl> <slug> <iter> <mode> <tokens> <kb> <subtopic>  Append JSONL telemetry
   json-output <reason> <system_message>   Output stop hook JSON response
 """
 
 import hashlib
 import json
+import os
 import re
 import sys
 import unicodedata
@@ -135,6 +139,23 @@ def extract_tags(text):
     return done, next_t
 
 
+# --- State file reading ---
+
+def _read_state_fields(state_file):
+    """Read and parse frontmatter from a state file.
+
+    Returns parsed fields dict, or None on any error.
+    Single read point to avoid redundant file I/O when multiple
+    functions need data from the same state file.
+    """
+    try:
+        with open(state_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return parse_frontmatter(content)
+    except Exception:
+        return None
+
+
 # --- Stale session detection ---
 
 def check_stale_session(state_file, max_hours=24):
@@ -142,13 +163,13 @@ def check_stale_session(state_file, max_hours=24):
 
     Returns True if stale, False otherwise. Returns False on any error.
     """
+    fields = _read_state_fields(state_file)
+    if not fields:
+        return False
+    started = fields.get('started_at', '')
+    if not started:
+        return False
     try:
-        with open(state_file, 'r', encoding='utf-8') as f:
-            content = f.read()
-        fields = parse_frontmatter(content)
-        started = fields.get('started_at', '')
-        if not started:
-            return False
         start = datetime.fromisoformat(started.replace('Z', '+00:00'))
         hours = (datetime.now(timezone.utc) - start).total_seconds() / 3600
         return hours > max_hours
@@ -161,18 +182,15 @@ def get_active_info(state_file, sep):
 
     Returns sep-joined string: topic<sep>mode<sep>iteration<sep>duration
     """
-    try:
-        with open(state_file, 'r', encoding='utf-8') as f:
-            content = f.read()
-        fields = parse_frontmatter(content)
-        topic = fields.get('topic', 'unknown')
-        mode = fields.get('mode', '?')
-        iteration = fields.get('iteration', '0')
-        started = fields.get('started_at', '')
-        duration = format_duration(started) if started else '?'
-        return sep.join([topic, mode, iteration, duration])
-    except Exception:
+    fields = _read_state_fields(state_file)
+    if not fields:
         return sep.join(['unknown', '?', '0', '?'])
+    topic = fields.get('topic', 'unknown')
+    mode = fields.get('mode', '?')
+    iteration = fields.get('iteration', '0')
+    started = fields.get('started_at', '')
+    duration = format_duration(started) if started else '?'
+    return sep.join([topic, mode, iteration, duration])
 
 
 def get_stale_info(state_file, sep):
@@ -180,16 +198,13 @@ def get_stale_info(state_file, sep):
 
     Returns sep-joined string: topic<sep>slug<sep>iteration
     """
-    try:
-        with open(state_file, 'r', encoding='utf-8') as f:
-            content = f.read()
-        fields = parse_frontmatter(content)
-        topic = fields.get('topic', 'unknown')
-        slug = fields.get('topic_slug', 'unknown')
-        iteration = fields.get('iteration', '0')
-        return sep.join([topic, slug, iteration])
-    except Exception:
+    fields = _read_state_fields(state_file)
+    if not fields:
         return sep.join(['unknown', 'unknown', '0'])
+    topic = fields.get('topic', 'unknown')
+    slug = fields.get('topic_slug', 'unknown')
+    iteration = fields.get('iteration', '0')
+    return sep.join([topic, slug, iteration])
 
 
 # --- Topic suggestion ---
@@ -341,7 +356,6 @@ def load_template(template_name, templates_dir):
     Returns dict with keys: name, description, mode, body.
     Raises FileNotFoundError if template not found.
     """
-    import os
     # Try exact name, then with .md suffix
     candidates = [
         os.path.join(templates_dir, template_name),
@@ -386,7 +400,6 @@ def list_templates(templates_dir):
 
     Returns list of dicts with keys: name, description, mode.
     """
-    import os
     templates = []
     if not os.path.isdir(templates_dir):
         return templates
@@ -415,7 +428,6 @@ def get_session_stats(transcript_path, output_dir):
 
     Returns (tokens, files_written, total_kb) tuple.
     """
-    import os
 
     tokens = 0
     if transcript_path and os.path.isfile(transcript_path):
@@ -448,6 +460,58 @@ def get_session_stats(transcript_path, output_dir):
 
     total_kb = round(total_bytes / 1024, 1)
     return tokens, files_written, total_kb
+
+
+# --- Telemetry ---
+
+def append_telemetry(jsonl_path, slug, iteration, mode, tokens_est, output_kb, next_subtopic):
+    """Append a per-iteration telemetry line to a JSONL file.
+
+    Each line records: slug, iteration, timestamp, mode, tokens_est, output_kb, next_subtopic.
+    """
+    line = {
+        'slug': slug,
+        'iteration': int(iteration),
+        'timestamp': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'mode': mode,
+        'tokens_est': int(tokens_est),
+        'output_kb': float(output_kb),
+        'next_subtopic': next_subtopic,
+    }
+    with open(jsonl_path, 'a', encoding='utf-8') as f:
+        f.write(json.dumps(line, ensure_ascii=False) + '\n')
+
+
+# --- Quality signals ---
+
+def compute_quality_signals(iteration, threshold, output_kb):
+    """Compute quality signals for session history.
+
+    Returns (budget_iters, iter_ratio, output_density) tuple.
+    """
+    # Map threshold to expected iteration count
+    if threshold >= 0.75:
+        budget_iters = 5
+    elif threshold <= 0.55:
+        budget_iters = 20
+    else:
+        budget_iters = 10
+
+    iter_int = max(int(iteration), 1)
+    iter_ratio = round(iter_int / max(budget_iters, 1), 2)
+    output_density = round(float(output_kb) / iter_int, 1)
+    return budget_iters, iter_ratio, output_density
+
+
+# --- Topic word extraction ---
+
+def extract_topic_words(topic, min_length=3):
+    """Extract lowercase words from a topic string for repeat detection.
+
+    Returns JSON string of words with length >= min_length.
+    """
+    words = [w.strip().lower() for w in topic.split() if len(w.strip()) >= min_length]
+    return json.dumps(words)
 
 
 # --- CLI interface ---
@@ -556,6 +620,28 @@ def main():
             print(20)   # aggressive
         else:
             print(10)   # moderate
+
+    elif cmd == 'compute-quality-signals':
+        iteration = sys.argv[2] if len(sys.argv) > 2 else '1'
+        threshold = sys.argv[3] if len(sys.argv) > 3 else '0.6'
+        output_kb = sys.argv[4] if len(sys.argv) > 4 else '0'
+        sep = sys.argv[5] if len(sys.argv) > 5 else '\n'
+        budget_iters, iter_ratio, output_density = compute_quality_signals(
+            iteration, float(threshold), output_kb
+        )
+        print(f'{budget_iters}{sep}{iter_ratio}{sep}{output_density}')
+
+    elif cmd == 'extract-topic-words':
+        topic = sys.argv[2] if len(sys.argv) > 2 else ''
+        min_len = int(sys.argv[3]) if len(sys.argv) > 3 else 3
+        print(extract_topic_words(topic, min_len))
+
+    elif cmd == 'append-telemetry':
+        # args: jsonl_path slug iteration mode tokens_est output_kb next_subtopic
+        if len(sys.argv) < 9:
+            print('Usage: append-telemetry <jsonl_path> <slug> <iteration> <mode> <tokens_est> <output_kb> <next_subtopic>', file=sys.stderr)
+            sys.exit(1)
+        append_telemetry(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8])
 
     elif cmd == 'json-output':
         print(json.dumps({

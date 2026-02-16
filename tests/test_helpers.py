@@ -5,7 +5,7 @@ Tests for scripts/helpers.py — the shared utility module.
 Covers: parse_frontmatter, make_slug, check_stale_session, get_stale_info,
         get_active_info, suggest_topic, suggest_topics, format_duration,
         format_rate_summary, validate_limits_config, abbreviate_number,
-        get_session_stats.
+        get_session_stats, append_telemetry.
 """
 
 import json
@@ -477,6 +477,143 @@ class TestSuggestTopics(unittest.TestCase):
             result = helpers.suggest_topic(f.name)
         os.unlink(f.name)
         self.assertEqual(result, "First topic")
+
+
+class TestComputeQualitySignals(unittest.TestCase):
+    """Test quality signal computation for session history."""
+
+    def test_moderate_budget(self):
+        budget_iters, iter_ratio, output_density = helpers.compute_quality_signals('5', 0.6, '10.0')
+        self.assertEqual(budget_iters, 10)
+        self.assertEqual(iter_ratio, 0.5)
+        self.assertEqual(output_density, 2.0)
+
+    def test_conservative_budget(self):
+        budget_iters, iter_ratio, output_density = helpers.compute_quality_signals('3', 0.8, '15.0')
+        self.assertEqual(budget_iters, 5)
+        self.assertEqual(iter_ratio, 0.6)
+        self.assertEqual(output_density, 5.0)
+
+    def test_aggressive_budget(self):
+        budget_iters, iter_ratio, output_density = helpers.compute_quality_signals('10', 0.4, '50.0')
+        self.assertEqual(budget_iters, 20)
+        self.assertEqual(iter_ratio, 0.5)
+        self.assertEqual(output_density, 5.0)
+
+    def test_zero_iteration_clamped(self):
+        """Should not divide by zero when iteration is 0."""
+        budget_iters, iter_ratio, output_density = helpers.compute_quality_signals('0', 0.6, '10.0')
+        self.assertEqual(iter_ratio, round(1 / 10, 2))  # max(0, 1) = 1
+        self.assertEqual(output_density, 10.0)
+
+
+class TestExtractTopicWords(unittest.TestCase):
+    """Test topic word extraction for repeat detection."""
+
+    def test_basic_extraction(self):
+        result = helpers.extract_topic_words("Rust async programming")
+        words = json.loads(result)
+        self.assertEqual(words, ["rust", "async", "programming"])
+
+    def test_short_words_filtered(self):
+        result = helpers.extract_topic_words("a b c Rust is fun")
+        words = json.loads(result)
+        self.assertEqual(words, ["rust", "fun"])
+
+    def test_empty_topic(self):
+        result = helpers.extract_topic_words("")
+        words = json.loads(result)
+        self.assertEqual(words, [])
+
+    def test_custom_min_length(self):
+        result = helpers.extract_topic_words("Go is a language", min_length=2)
+        words = json.loads(result)
+        self.assertIn("go", words)
+        self.assertIn("is", words)
+
+    def test_returns_valid_json(self):
+        result = helpers.extract_topic_words("build a REST API")
+        parsed = json.loads(result)
+        self.assertIsInstance(parsed, list)
+
+
+class TestReadStateFields(unittest.TestCase):
+    """Test the shared state file reader."""
+
+    def test_reads_fields(self):
+        content = '---\ntopic: "Rust async"\nmode: research\niteration: 3\n---\nBody'
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
+            f.write(content)
+            f.flush()
+            fields = helpers._read_state_fields(f.name)
+        os.unlink(f.name)
+        self.assertIsNotNone(fields)
+        self.assertEqual(fields["topic"], "Rust async")
+        self.assertEqual(fields["mode"], "research")
+
+    def test_missing_file_returns_none(self):
+        self.assertIsNone(helpers._read_state_fields("/nonexistent/file.md"))
+
+    def test_used_by_check_stale(self):
+        """Verify check_stale_session still works after refactoring to _read_state_fields."""
+        recent_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        content = f'---\nstarted_at: "{recent_time}"\n---\n'
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
+            f.write(content)
+            f.flush()
+            result = helpers.check_stale_session(f.name)
+        os.unlink(f.name)
+        self.assertFalse(result)
+
+
+class TestAppendTelemetry(unittest.TestCase):
+    """Tests for append_telemetry()."""
+
+    def test_appends_jsonl_line(self):
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            path = f.name
+        try:
+            helpers.append_telemetry(path, 'my-topic', '3', 'research', '5000', '12.5', 'next thing')
+            with open(path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            self.assertEqual(len(lines), 1)
+            data = json.loads(lines[0])
+            self.assertEqual(data['slug'], 'my-topic')
+            self.assertEqual(data['iteration'], 3)
+            self.assertEqual(data['mode'], 'research')
+            self.assertEqual(data['tokens_est'], 5000)
+            self.assertEqual(data['output_kb'], 12.5)
+            self.assertEqual(data['next_subtopic'], 'next thing')
+            self.assertIn('timestamp', data)
+        finally:
+            os.unlink(path)
+
+    def test_appends_multiple_lines(self):
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            path = f.name
+        try:
+            helpers.append_telemetry(path, 'topic-a', '1', 'build', '1000', '2.0', 'sub1')
+            helpers.append_telemetry(path, 'topic-a', '2', 'build', '2000', '4.0', 'sub2')
+            with open(path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            self.assertEqual(len(lines), 2)
+            self.assertEqual(json.loads(lines[0])['iteration'], 1)
+            self.assertEqual(json.loads(lines[1])['iteration'], 2)
+        finally:
+            os.unlink(path)
+
+    def test_creates_file_if_missing(self):
+        path = os.path.join(tempfile.gettempdir(), 'test_telemetry_new.jsonl')
+        if os.path.exists(path):
+            os.unlink(path)
+        try:
+            helpers.append_telemetry(path, 'slug', '1', 'research', '100', '1.0', 'sub')
+            self.assertTrue(os.path.exists(path))
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.loads(f.readline())
+            self.assertEqual(data['slug'], 'slug')
+        finally:
+            os.unlink(path)
 
 
 if __name__ == "__main__":

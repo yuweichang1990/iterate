@@ -22,6 +22,7 @@ import math
 import random
 import re
 import sys
+from collections import Counter
 from datetime import datetime
 from itertools import combinations
 from pathlib import Path
@@ -399,7 +400,6 @@ def detect_communities(graph, min_edge_weight=2):
             if not adj[node]:
                 continue
             neighbor_labels = [labels.get(n, n) for n in adj[node]]
-            from collections import Counter
             most_common = Counter(neighbor_labels).most_common(1)[0][0]
             if labels[node] != most_common:
                 labels[node] = most_common
@@ -414,10 +414,11 @@ def detect_communities(graph, min_edge_weight=2):
     return communities
 
 
-def find_gaps(graph, n=5):
+def find_gaps(graph, n=5, max_nodes=500):
     """Find structural gaps: concept pairs that share neighbors but aren't connected.
 
     Returns list of (node_a, node_b, shared_count, shared_list) tuples.
+    Skips O(n^2) scan when the graph exceeds max_nodes to avoid slow execution.
     """
     adj = {}
     for e in graph["edges"]:
@@ -429,9 +430,14 @@ def find_gaps(graph, n=5):
                 adj.setdefault(cid, set()).add(other)
                 adj.setdefault(other, set()).add(cid)
 
+    nodes = list(adj.keys())
+
+    # Safeguard: skip O(n^2) pairwise scan for very large graphs
+    if len(nodes) > max_nodes:
+        return []
+
     gaps = []
     seen = set()
-    nodes = list(adj.keys())
     for i, node_a in enumerate(nodes):
         for node_b in nodes[i + 1:]:
             if node_b in adj.get(node_a, set()):

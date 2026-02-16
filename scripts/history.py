@@ -225,8 +225,9 @@ def cmd_show():
     history = load_history()
     state_file = Path(".claude/auto-explorer.local.md")
 
-    # Import abbreviate_number from helpers (used for token display throughout)
+    # Import helpers module (abbreviate_number, parse_frontmatter)
     abbrev = str  # fallback: just convert to string
+    parse_fm = None
     try:
         script_dir = Path(__file__).parent
         helpers_spec = importlib.util.spec_from_file_location(
@@ -235,6 +236,7 @@ def cmd_show():
         helpers_mod = importlib.util.module_from_spec(helpers_spec)
         helpers_spec.loader.exec_module(helpers_mod)
         abbrev = helpers_mod.abbreviate_number
+        parse_fm = helpers_mod.parse_frontmatter
     except Exception:
         pass
 
@@ -243,18 +245,22 @@ def cmd_show():
     if state_file.exists():
         try:
             content = state_file.read_text(encoding="utf-8")
-            in_fm = False
-            fields = {}
-            for line in content.split("\n"):
-                if line.strip() == "---":
-                    if in_fm:
-                        break
-                    in_fm = True
-                    continue
-                if in_fm and ":" in line:
-                    k, v = line.split(":", 1)
-                    fields[k.strip()] = v.strip().strip('"')
-            active = fields
+            if parse_fm:
+                active = parse_fm(content)
+            else:
+                # Inline fallback if helpers import failed
+                in_fm = False
+                fields = {}
+                for line in content.split("\n"):
+                    if line.strip() == "---":
+                        if in_fm:
+                            break
+                        in_fm = True
+                        continue
+                    if in_fm and ":" in line:
+                        k, v = line.split(":", 1)
+                        fields[k.strip()] = v.strip().strip('"')
+                active = fields
         except Exception:
             pass
 

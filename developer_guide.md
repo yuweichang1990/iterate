@@ -334,10 +334,10 @@ python -m pytest tests/test_history.py -v
 | `tests/test_tag_extraction.py` | `<explore-next>`/`<explore-done>` regex、Unit Separator 協定、Tab bug 迴歸、JSONL 解析 | 14 |
 | `tests/test_check_rate_limits.py` | Session token 計算、每日 token 提取、閾值檢查、override 機制 | 12 |
 | `tests/test_history.py` | Session 新增/結束、過期 session 清理、duration 格式化、狀態圖示、品質信號 | 13 |
-| `tests/test_interest_graph.py` | 興趣圖譜 load/save、add concepts、co-occurrence、decay、Thompson Sampling、bandit feedback、Markdown 生成、migration、community detection、gap finding、CLI | 52 |
+| `tests/test_interest_graph.py` | 興趣圖譜 load/save、add concepts、co-occurrence、decay、Thompson Sampling、bandit feedback、Markdown 生成、migration、community detection、gap finding (含大圖安全閥)、CLI | 53 |
 | `tests/test_improvement_engine.py` | 改進引擎 template stats、suggest template、suggest budget、mode correction、frequent keywords、session similarity、detect repeat、extract keywords、CLI | 27 |
 | `tests/test_mode_detection.py` | 英文/中文動作動詞 build 偵測、research 主題排除、大小寫不敏感、空格變體 | 9 (76 subtests) |
-| `tests/test_helpers.py` | frontmatter 解析、slug 生成、過期偵測、主題建議、duration 格式化、rate summary、budget-iterations | 27 |
+| `tests/test_helpers.py` | frontmatter 解析、slug 生成、過期偵測、主題建議、duration 格式化、rate summary、budget-iterations、quality signals、topic words、state file reader、telemetry append | 39 |
 | `tests/test_auto_export.py` | 自動匯出 flag file 一致性、summary prompt 內容、清理機制 | 9 |
 | `tests/test_bash_syntax.py` | `bash -n` 語法檢查（Windows 自動尋找 Git Bash，避免 WSL） | 2 |
 | `tests/test_version_consistency.py` | plugin.json、marketplace.json、CHANGELOG.md 版本一致性 | 4 |
